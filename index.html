@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>小港重訓手帳</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: a pocket logbook. Ivory + runway orange from the building's own palette; floor badges (2F/3F) route each session so you switch floors once. */
+:root{
+  --bg:#F8F6F1; --surface:#FFFFFF; --ink:#1C232E; --muted:#667080;
+  --accent:#EE6A1C; --line:#E6E1D6; --ok:#1E8757; --warn:#A86A12;
+  --accent-soft:#FDEBDD; --warn-soft:#FBF0DA; --ok-soft:#E1F2E9;
+  --display:"Barlow Condensed","Noto Sans TC",system-ui,sans-serif;
+  --body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#13161B; --surface:#1B1F26; --ink:#ECEEF2; --muted:#98A1AD;
+    --accent:#FF8A3D; --line:#2A303A; --ok:#4CC08A; --warn:#E3A84A;
+    --accent-soft:#3A2416; --warn-soft:#352A16; --ok-soft:#173226;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#13161B; --surface:#1B1F26; --ink:#ECEEF2; --muted:#98A1AD;
+  --accent:#FF8A3D; --line:#2A303A; --ok:#4CC08A; --warn:#E3A84A;
+  --accent-soft:#3A2416; --warn-soft:#352A16; --ok-soft:#173226;
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--body);font-size:16px;line-height:1.55}
+body{padding-bottom:calc(88px + env(safe-area-inset-bottom))}
+.wrap{max-width:640px;margin:0 auto;padding:0 16px}
+h1,h2,h3{margin:0;text-wrap:balance;line-height:1.25}
+button{font:inherit;color:inherit}
+button:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.num{font-family:var(--display);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+
+header.top{padding:20px 0 12px;display:flex;align-items:flex-end;justify-content:space-between;gap:12px}
+header.top h1{font-size:26px;font-weight:900;letter-spacing:.02em}
+header.top h1 span{color:var(--accent)}
+header.top p{margin:2px 0 0;color:var(--muted);font-size:14px}
+.runway{height:4px;background:repeating-linear-gradient(90deg,var(--accent) 0 18px,transparent 18px 30px);border-radius:2px;margin-bottom:16px;opacity:.85}
+
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.stack{display:flex;flex-direction:column;gap:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.label{font-size:13px;color:var(--muted);font-weight:500}
+.seg{display:flex;gap:6px}
+.seg button{flex:1;padding:10px 8px;border:1px solid var(--line);background:var(--surface);border-radius:10px;font-weight:700;cursor:pointer}
+.seg button[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
+
+.chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.f3{background:var(--ink);color:var(--bg)}
+.f2{background:var(--accent-soft);color:var(--accent)}
+.fany{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
+.sure{background:var(--ok-soft);color:var(--ok)}
+.guess{background:var(--warn-soft);color:var(--warn)}
+
+.day{display:flex;flex-direction:column;gap:12px;border-left:5px solid var(--accent)}
+.day-head{display:flex;justify-content:space-between;align-items:flex-start;gap:8px}
+.day-head h2{font-size:20px;font-weight:900}
+.day-head .meta{color:var(--muted);font-size:13px}
+.mins{text-align:right;flex-shrink:0}
+.mins b{font-size:28px;line-height:1;display:block}
+.mins small{color:var(--muted);font-size:12px}
+.exlist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.exlist li{display:grid;grid-template-columns:auto 1fr auto;gap:8px;align-items:center;padding:8px 0;border-top:1px dashed var(--line)}
+.exlist li:first-child{border-top:0}
+.exlist .nm{font-weight:500}
+.exlist .dot{width:8px;height:8px;border-radius:50%;display:inline-block;margin-left:6px;vertical-align:middle;background:var(--warn)}
+.exlist .sr{font-size:18px;color:var(--muted)}
+.btn{display:inline-flex;justify-content:center;align-items:center;gap:6px;padding:12px 16px;border-radius:12px;border:1px solid var(--line);background:var(--surface);font-weight:700;cursor:pointer;min-height:44px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.ghost{background:transparent}
+.btn.block{width:100%}
+.btn.danger{color:#C2412D;border-color:currentColor;background:transparent}
+
+.notes{display:grid;grid-template-columns:1fr;gap:10px}
+.note{display:grid;grid-template-columns:28px 1fr;gap:8px;font-size:14px}
+.note b.k{font-family:var(--display);font-size:20px;color:var(--accent);line-height:1.2}
+.note p{margin:0}
+.legend{display:flex;gap:10px;flex-wrap:wrap;font-size:13px;color:var(--muted)}
+
+.banner{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--accent);color:#fff;border-radius:14px;padding:14px 16px}
+.banner .btn{background:#fff;color:var(--accent);border:0}
+
+/* workout */
+.wk-head{position:sticky;top:0;z-index:5;background:var(--bg);padding:12px 0 10px;border-bottom:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px}
+.wk-head h2{font-size:18px;font-weight:900}
+.clock{text-align:right}
+.clock b{font-size:30px;line-height:1}
+.clock small{display:block;font-size:12px;color:var(--muted)}
+.clock.over b{color:#C2412D}
+.prog{height:6px;border-radius:3px;background:var(--line);overflow:hidden}
+.prog i{display:block;height:100%;background:var(--accent);transition:width .3s}
+.ex{display:flex;flex-direction:column;gap:10px}
+.ex.done{opacity:.6}
+.ex-top{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.ex-top h3{font-size:18px;font-weight:700}
+.ex .presc{font-size:15px;color:var(--muted)}
+.ex .presc b{color:var(--ink);font-size:20px}
+.cue{font-size:14px;color:var(--muted);margin:0;padding-left:10px;border-left:3px solid var(--line)}
+.last{font-size:13px;color:var(--ok);font-weight:500}
+.sets{display:flex;flex-direction:column;gap:6px}
+.set{display:grid;grid-template-columns:38px 1fr 1fr 52px;gap:6px;align-items:center}
+.set .n{font-family:var(--display);font-size:18px;color:var(--muted);text-align:center}
+.set input{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:600 18px var(--display);text-align:center;padding:0 6px}
+.set input::placeholder{color:var(--muted);font-family:var(--body);font-size:13px;font-weight:400}
+.tick{min-height:44px;border-radius:10px;border:2px solid var(--line);background:var(--surface);cursor:pointer;font-weight:900;font-size:18px;color:var(--muted)}
+.tick[aria-pressed="true"]{background:var(--ok);border-color:var(--ok);color:#fff}
+.swap{font-size:13px;padding:6px 10px;min-height:36px;border-radius:999px}
+.floorbreak{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px;font-weight:700}
+.floorbreak::before,.floorbreak::after{content:"";flex:1;height:1px;background:var(--line)}
+
+/* rest bar + nav */
+.rest{position:fixed;left:0;right:0;bottom:calc(64px + env(safe-area-inset-bottom));z-index:20;display:none}
+.rest.on{display:block}
+.rest .in{max-width:640px;margin:0 auto 8px;padding:10px 14px;margin-inline:16px;background:var(--ink);color:var(--bg);border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:10px;box-shadow:0 8px 24px rgba(0,0,0,.2)}
+@media (min-width:672px){.rest .in{margin-inline:auto}}
+.rest b{font-size:34px;line-height:1}
+.rest button{background:transparent;border:1px solid currentColor;color:inherit;border-radius:10px;padding:8px 12px;font-weight:700;cursor:pointer}
+nav.tabs{position:fixed;left:0;right:0;bottom:0;z-index:30;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav.tabs .in{max-width:640px;margin:0 auto;display:grid;grid-template-columns:repeat(4,1fr)}
+nav.tabs button{background:none;border:0;padding:10px 4px 12px;font-size:13px;font-weight:700;color:var(--muted);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+nav.tabs button svg{width:22px;height:22px}
+nav.tabs button[aria-current="page"]{color:var(--accent)}
+
+/* history */
+.hist{display:flex;flex-direction:column;gap:8px}
+.hist-item{display:grid;grid-template-columns:auto 1fr auto;gap:12px;align-items:center}
+.hist-item .d{text-align:center;min-width:44px}
+.hist-item .d b{font-size:26px;line-height:1;display:block}
+.hist-item .d small{font-size:12px;color:var(--muted)}
+.hist-item h3{font-size:16px}
+.hist-item p{margin:0;font-size:13px;color:var(--muted)}
+.empty{color:var(--muted);text-align:center;padding:24px 8px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.stat{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px;text-align:center}
+.stat b{font-size:30px;line-height:1;display:block}
+.stat small{font-size:12px;color:var(--muted)}
+
+/* info */
+.info dl{margin:0;display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:15px}
+.info dt{font-weight:700}
+.info dd{margin:0;color:var(--muted)}
+.info a{color:var(--accent)}
+.src{font-size:13px;color:var(--muted)}
+.src ul{padding-left:18px;margin:6px 0 0}
+section{margin-bottom:16px}
+h2.sec{font-size:15px;color:var(--muted);font-weight:700;margin:20px 0 10px;letter-spacing:.04em}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>小港<span>重訓</span>手帳</h1>
+      <p id="subtitle">減脂保肌・一週 3 練</p>
+    </div>
+  </header>
+  <div class="runway" aria-hidden="true"></div>
+  <main id="view"></main>
+</div>
+
+<div class="rest" id="rest" role="status" aria-live="polite">
+  <div class="in">
+    <div><small>組間休息</small><br><b class="num" id="restT">1:30</b></div>
+    <div class="row">
+      <button type="button" id="restAdd">+30 秒</button>
+      <button type="button" id="restSkip">跳過</button>
+    </div>
+  </div>
+</div>
+
+<nav class="tabs" aria-label="主選單">
+  <div class="in">
+    <button type="button" data-tab="plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>計畫</button>
+    <button type="button" data-tab="workout"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h2M20 12h2M6 7v10M18 7v10M9 9v6M15 9v6M9 12h6"/></svg>訓練</button>
+    <button type="button" data-tab="history"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5M4 19h16M8 15l4-5 3 3 5-6"/></svg>紀錄</button>
+    <button type="button" data-tab="info"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M5 21V10l7-5 7 5v11M10 21v-5h4v5"/></svg>場館</button>
+  </div>
+</nav>
+
+<script>
+/* ---------- 動作庫 ---------- */
+// floor: '3F' 自由重量區 / '2F' 健身中心 / 'any' 任何空地
+// sure: true = 新聞報導確認館內有；false = 一般健身房的經典器材，現場確認
+const EX = {
+  squat:{n:'槓鈴背蹲舉',f:'3F',sure:true,cue:'槓放上背，蹲到大腿約與地面平行；膝蓋跟腳尖同方向。',alt:'legpress'},
+  bench:{n:'槓鈴臥推',f:'3F',sure:true,cue:'肩胛往後收、往下壓，槓落在胸口下緣，雙腳踩穩地板。',alt:'chestpress'},
+  dl:{n:'傳統硬舉',f:'3F',sure:true,cue:'槓貼小腿，背打直，像用腿把地板推開一樣站起來。',alt:'rdl'},
+  rdl:{n:'羅馬尼亞硬舉',f:'3F',sure:true,cue:'膝蓋微彎、屁股往後推，槓沿大腿滑到膝蓋下方，感覺大腿後側拉長。',alt:'legcurl'},
+  bbrow:{n:'槓鈴划船',f:'3F',sure:true,cue:'上身前傾約 45 度，背打直，槓拉向肚臍。',alt:'cablerow'},
+  ohp:{n:'槓鈴站姿肩推',f:'3F',sure:true,cue:'臀部與腹部夾緊，槓從鎖骨推過頭頂，頭稍微往後讓槓通過。',alt:'shoulderpress'},
+  bbcurl:{n:'槓鈴彎舉',f:'3F',sure:true,cue:'手肘貼身體，不甩腰。',alt:'curl'},
+  cgbench:{n:'窄握臥推',f:'3F',sure:true,cue:'握距約與肩同寬，手肘貼近身體。',alt:'triceps'},
+  chestpress:{n:'胸推機',f:'2F',sure:true,cue:'握把對齊胸口中段，推出時不要聳肩。',alt:'pushup'},
+  pulldown:{n:'滑輪下拉',f:'2F',sure:false,cue:'握距比肩寬，把桿拉到上胸，手肘往下往後。',alt:'bbrow'},
+  cablerow:{n:'坐姿划船機',f:'2F',sure:false,cue:'胸口挺起，把握把拉向腹部，停一下再放回。',alt:'bbrow'},
+  shoulderpress:{n:'肩推機',f:'2F',sure:false,cue:'座椅調到握把與肩同高，推到手臂快伸直即可。',alt:'ohp'},
+  legpress:{n:'腿推機',f:'2F',sure:false,cue:'腳踩踏板中間，膝蓋彎到約 90 度；下背不能離開椅背。',alt:'squat'},
+  legcurl:{n:'腿彎舉機',f:'2F',sure:false,cue:'膝蓋對齊機器轉軸，慢慢放下。',alt:'rdl'},
+  legext:{n:'腿伸展機',f:'2F',sure:false,cue:'頂端停 1 秒，放下時控制速度。',alt:'splitsquat'},
+  pecdeck:{n:'蝴蝶機夾胸',f:'2F',sure:false,cue:'手肘微彎，像抱大樹一樣往前合。',alt:'pushup'},
+  facepull:{n:'繩索臉拉',f:'2F',sure:false,cue:'滑輪調到臉的高度，拉向額頭，手肘向外打開。',alt:'ytw'},
+  triceps:{n:'繩索三頭下壓',f:'2F',sure:false,cue:'手肘固定在身體兩側，只動前臂。',alt:'cgbench'},
+  curl:{n:'繩索彎舉',f:'2F',sure:false,cue:'手肘貼身體，慢慢放下。',alt:'bbcurl'},
+  splitsquat:{n:'分腿蹲',f:'any',sure:true,cue:'徒手就能做，熟了再手持啞鈴；前腳膝蓋不要往內倒。',alt:'legpress'},
+  pushup:{n:'伏地挺身',f:'any',sure:true,cue:'身體成一直線；做不了就把手撐在椅子或箱子上。',alt:'chestpress'},
+  ytw:{n:'俯身 Y-T 字舉',f:'any',sure:true,cue:'上身前傾，手臂拉成 Y 字再拉成 T 字，徒手或用很輕的啞鈴。',alt:'facepull'},
+  plank:{n:'棒式',f:'any',sure:true,cue:'手肘在肩膀正下方，肚子收緊，屁股不要翹高或塌下去。',alt:'deadbug'},
+  deadbug:{n:'死蟲式',f:'any',sure:true,cue:'下背貼地，對側手腳慢慢伸直再收回。',alt:'plank'},
+  treadmill:{n:'跑步機坡度快走',f:'2F',sure:true,cue:'坡度 8–12%，時速 4.5–5.5 公里，不要抓扶手。',alt:'elliptical',cardio:true},
+  elliptical:{n:'滑步機',f:'2F',sure:true,cue:'中等強度：會喘，但還能講短句。',alt:'treadmill',cardio:true},
+  bike:{n:'腳踏車間歇',f:'2F',sure:true,cue:'衝刺 30 秒＋輕踩 90 秒算 1 輪。',alt:'elliptical',cardio:true}
+};
+
+/* ---------- 課表 ---------- */
+// [動作, 組數, 次數, 休息秒數]；cardio: [動作, 分鐘, 說明]
+const DAYS = {
+  A:{t:'A｜深蹲日',focus:'全身・槓鈴深蹲＋臥推',items:[['squat',3,'6–8',150],['bench',3,'6–8',150],['pulldown',3,'10–12',90],['legcurl',2,'12–15',60],['plank',3,'30–45 秒',45]],cardio:['elliptical',15,'中等強度 15 分鐘']},
+  B:{t:'B｜器械日',focus:'全身・以 2 樓器械為主',items:[['rdl',3,'8',120],['legpress',3,'10–12',90],['chestpress',3,'10–12',90],['cablerow',3,'10–12',90],['shoulderpress',2,'10–12',75],['deadbug',3,'每側 8 下',45]],cardio:['treadmill',15,'坡度快走 15 分鐘']},
+  C:{t:'C｜硬舉日',focus:'全身・硬舉＋肩推',items:[['dl',3,'5',180],['ohp',3,'8',120],['bbrow',3,'8–10',90],['legext',2,'15',60],['facepull',2,'15',60]],cardio:['bike',16,'間歇 8 輪（約 16 分鐘）']},
+  U1:{t:'上半身 1｜槓鈴',focus:'推＋拉，重量為主',items:[['bench',4,'6–8',150],['bbrow',3,'8–10',90],['ohp',3,'8',120],['pulldown',3,'10–12',90],['triceps',2,'12–15',60],['curl',2,'12–15',60]],cardio:['elliptical',10,'中等強度 10 分鐘']},
+  L1:{t:'下半身 1｜深蹲',focus:'深蹲＋大腿後側',items:[['squat',4,'6–8',150],['rdl',3,'8–10',120],['legcurl',3,'12',60],['legext',2,'15',60],['plank',3,'45 秒',45]],cardio:['treadmill',15,'坡度快走 15 分鐘']},
+  U2:{t:'上半身 2｜器械',focus:'全程在 2 樓，不用換樓層',items:[['chestpress',3,'10–12',90],['cablerow',3,'10–12',90],['shoulderpress',3,'10–12',90],['pecdeck',2,'15',60],['facepull',2,'15',60]],cardio:['bike',12,'間歇 6 輪（約 12 分鐘）']},
+  L2:{t:'下半身 2｜硬舉',focus:'硬舉＋單腳訓練',items:[['dl',3,'5',180],['legpress',3,'12',90],['splitsquat',3,'每腳 10 下',90],['legcurl',2,'15',60],['deadbug',3,'每側 8 下',45]],cardio:['treadmill',20,'坡度快走 20 分鐘']}
+};
+const PLANS = {2:['A','B'],3:['A','B','C'],4:['U1','L1','U2','L2']};
+const WEEK = {2:'例如週二、週六（中間至少休 1 天）',3:'例如週一、三、五',4:'例如週一、二、四、五'};
+const WARMUP = 8;
+
+/* ---------- 儲存 ---------- */
+const KEY='xg-gym-v1';
+let S = {days:3,history:[],current:null};
+try{const raw=localStorage.getItem(KEY); if(raw) S=Object.assign(S,JSON.parse(raw));}catch(e){}
+function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+
+let tab = S.current ? 'workout' : 'plan';
+const $ = s=>document.querySelector(s);
+const esc = s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function floorChip(f){return f==='3F'?'<span class="chip f3">3F</span>':f==='2F'?'<span class="chip f2">2F</span>':'<span class="chip fany">空地</span>';}
+function sureChip(e){return e.sure?'<span class="chip sure">館內確認有</span>':'<span class="chip guess">經典器材・現場確認</span>';}
+function estMin(d){let s=0;d.items.forEach(([,sets,,rest])=>{s+=sets*(rest+40)});return Math.round(WARMUP+s/60+d.cardio[1]);}
+function route(d){const fl=[];d.items.concat([d.cardio]).forEach(([id])=>{const f=EX[id].f;if(f!=='any'&&fl[fl.length-1]!==f)fl.push(f)});return fl.join(' → ');}
+function fmt(sec){sec=Math.max(0,Math.round(sec));return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');}
+
+function lastFor(id){
+  for(let i=S.history.length-1;i>=0;i--){
+    const it=S.history[i].items.find(x=>x.ex===id);
+    if(it){const done=it.sets.filter(s=>s.done&&(s.w||s.r));if(done.length){const b=done[done.length-1];return (b.w?b.w+' kg':'徒手')+(b.r?' × '+b.r:'');}}
+  }
+  return '';
+}
+
+/* ---------- 計畫 ---------- */
+function renderPlan(){
+  const keys=PLANS[S.days];
+  let h='';
+  if(S.current){h+=`<div class="banner"><div><b>${esc(DAYS[S.current.day].t)}</b><br><small>訓練進行中</small></div><button class="btn" data-act="goWorkout" type="button">繼續</button></div><div style="height:12px"></div>`;}
+  h+=`<section class="panel stack">
+    <div class="label" id="lblDays">一週去幾天？</div>
+    <div class="seg" role="group" aria-labelledby="lblDays">${[2,3,4].map(n=>`<button type="button" data-act="days" data-n="${n}" aria-pressed="${S.days===n}">${n} 天</button>`).join('')}</div>
+    <div class="label">${WEEK[S.days]}。課表依序輪流，休息幾天回來就接著練下一天。</div>
+  </section>`;
+  h+=`<h2 class="sec">課表</h2><div class="stack">`;
+  keys.forEach(k=>{
+    const d=DAYS[k];
+    h+=`<article class="panel day">
+      <div class="day-head"><div><h2>${esc(d.t)}</h2><div class="meta">${esc(d.focus)}・路線 ${route(d)}</div></div>
+      <div class="mins"><b class="num">${estMin(d)}</b><small>分鐘</small></div></div>
+      <ul class="exlist">${d.items.map(([id,sets,reps])=>{const e=EX[id];return `<li>${floorChip(e.f)}<span class="nm">${esc(e.n)}${e.sure?'':'<i class="dot" title="現場確認"></i>'}</span><span class="sr num">${sets}×${esc(reps)}</span></li>`}).join('')}
+      <li>${floorChip(EX[d.cardio[0]].f)}<span class="nm">${esc(EX[d.cardio[0]].n)}</span><span class="sr">${esc(d.cardio[1])} 分</span></li></ul>
+      <button class="btn primary block" type="button" data-act="start" data-day="${k}">開始這天的訓練</button>
+    </article>`;
+  });
+  h+=`</div>
+  <div class="legend" style="margin-top:12px"><span><span class="chip sure">館內確認有</span> 新聞報導提到的設備</span><span><span class="chip guess">經典器材・現場確認</span> 沒有就按「換動作」</span></div>
+  <h2 class="sec">怎麼練</h2>
+  <section class="panel notes">
+    <div class="note"><b class="k">1</b><p><b>熱身 8 分鐘：</b>滑步機 5 分鐘，第一個槓鈴動作先用空槓或輕重量做 2 組。</p></div>
+    <div class="note"><b class="k">2</b><p><b>重量怎麼選：</b>每組做完還能再做 2–3 下就對了。前兩週先用輕重量把動作練熟。</p></div>
+    <div class="note"><b class="k">3</b><p><b>什麼時候加重：</b>每一組都做到次數範圍的上限，下次就加重：上半身 +2.5 kg、下半身 +5 kg。</p></div>
+    <div class="note"><b class="k">4</b><p><b>減脂的關鍵在飲食：</b>重訓是用來保住肌肉，最後的有氧是額外多消耗熱量。體重一週掉 0.5 kg 左右最好。</p></div>
+    <div class="note"><b class="k">5</b><p><b>控制在 1 小時內：</b>健身房按小時收費，每天的預估時間都抓在 60 分鐘以內。</p></div>
+  </section>`;
+  return h;
+}
+
+/* ---------- 訓練中 ---------- */
+function curItems(){
+  const c=S.current, d=DAYS[c.day];
+  return d.items.map((it,i)=>({i,ex:c.swaps[i]?EX[it[0]].alt:it[0],orig:it[0],sets:it[1],reps:it[2],rest:it[3]}));
+}
+function renderWorkout(){
+  if(!S.current){
+    return `<div class="panel empty"><p>目前沒有進行中的訓練。</p><button class="btn primary" type="button" data-act="tab" data-t="plan">到計畫挑一天開始</button></div>`;
+  }
+  const c=S.current, d=DAYS[c.day], items=curItems();
+  let total=0,done=0;
+  items.forEach(it=>{const L=c.logs[it.i];total+=L.length;done+=L.filter(s=>s.done).length});
+  total+=1; if(c.cardioDone)done+=1;
+  let h=`<div class="wk-head"><div><h2>${esc(d.t)}</h2><div class="label">已完成 <span class="num" id="doneCount">${done}/${total}</span> 組</div></div>
+    <div class="clock" id="clock"><b class="num" id="elapsed">0:00</b><small>目標 60 分鐘內</small></div></div>
+    <div class="prog" style="margin:10px 0 14px"><i style="width:${Math.round(done/total*100)}%"></i></div>
+    <div class="stack">`;
+  let lastFloor=null;
+  items.forEach(it=>{
+    const e=EX[it.ex], L=c.logs[it.i], allDone=L.every(s=>s.done);
+    if(e.f!=='any'&&e.f!==lastFloor){ if(lastFloor) h+=`<div class="floorbreak">移動到 ${e.f}</div>`; lastFloor=e.f; }
+    const last=lastFor(it.ex);
+    h+=`<article class="panel ex${allDone?' done':''}">
+      <div class="ex-top"><div class="stack" style="gap:4px"><div class="row">${floorChip(e.f)}${sureChip(e)}</div><h3>${esc(e.n)}</h3></div>
+      <button class="btn swap" type="button" data-act="swap" data-i="${it.i}">${c.swaps[it.i]?'換回 '+esc(EX[it.orig].n):'換動作'}</button></div>
+      <div class="presc"><b class="num">${it.sets} × ${esc(it.reps)}</b>・休息 ${fmt(it.rest)}</div>
+      <p class="cue">${esc(e.cue)}</p>
+      ${last?`<div class="last">上次：${esc(last)}</div>`:''}
+      <div class="sets">${L.map((s,j)=>`<div class="set"><span class="n">${j+1}</span>
+        <input id="w-${it.i}-${j}" inputmode="decimal" placeholder="公斤" value="${esc(s.w)}" data-i="${it.i}" data-j="${j}" data-k="w" aria-label="第 ${j+1} 組重量（公斤）">
+        <input id="r-${it.i}-${j}" inputmode="numeric" placeholder="次數" value="${esc(s.r)}" data-i="${it.i}" data-j="${j}" data-k="r" aria-label="第 ${j+1} 組次數">
+        <button class="tick" type="button" data-act="tick" data-i="${it.i}" data-j="${j}" aria-pressed="${!!s.done}" aria-label="完成第 ${j+1} 組">✓</button></div>`).join('')}</div>
+    </article>`;
+  });
+  const cid=c.swapCardio?EX[d.cardio[0]].alt:d.cardio[0], ce=EX[cid];
+  if(lastFloor!=='2F') h+=`<div class="floorbreak">移動到 2F</div>`;
+  h+=`<article class="panel ex${c.cardioDone?' done':''}">
+      <div class="ex-top"><div class="stack" style="gap:4px"><div class="row">${floorChip(ce.f)}<span class="chip f2">收操有氧</span></div><h3>${esc(ce.n)}</h3></div>
+      <button class="btn swap" type="button" data-act="swapCardio">${c.swapCardio?'換回':'換動作'}</button></div>
+      <div class="presc"><b class="num">${d.cardio[1]} 分鐘</b>・${esc(d.cardio[2])}</div>
+      <p class="cue">${esc(ce.cue)}</p>
+      <button class="tick" type="button" data-act="cardio" aria-pressed="${!!c.cardioDone}" style="width:100%">${c.cardioDone?'✓ 有氧完成':'完成有氧'}</button>
+    </article>
+    <button class="btn primary block" type="button" data-act="finish">結束訓練並存檔</button>
+    <button class="btn danger block" type="button" data-act="abort" id="abortBtn">放棄這次訓練</button>
+  </div>`;
+  return h;
+}
+
+/* ---------- 紀錄 ---------- */
+function renderHistory(){
+  const H=S.history.slice().reverse();
+  const now=Date.now(), wk=S.history.filter(x=>now-new Date(x.date).getTime()<7*864e5).length;
+  let vol=0; S.history.forEach(x=>x.items.forEach(it=>it.sets.forEach(s=>{if(s.done)vol+=(+s.w||0)*(+s.r||0)})));
+  let h=`<div class="stats">
+    <div class="stat"><b class="num">${S.history.length}</b><small>總訓練次數</small></div>
+    <div class="stat"><b class="num">${wk}</b><small>最近 7 天</small></div>
+    <div class="stat"><b class="num">${vol>=1000?(vol/1000).toFixed(1)+'t':vol}</b><small>總訓練量（kg）</small></div></div>
+    <h2 class="sec">訓練紀錄</h2>`;
+  if(!H.length) return h+`<div class="panel empty">完成第一次訓練後，紀錄和每個動作的重量都會出現在這裡。</div>`;
+  h+=`<div class="hist">`;
+  H.forEach(x=>{
+    const dt=new Date(x.date); let v=0,n=0;
+    x.items.forEach(it=>it.sets.forEach(s=>{if(s.done){n++;v+=(+s.w||0)*(+s.r||0)}}));
+    const best=x.items.filter(it=>it.sets.some(s=>s.done&&s.w)).slice(0,3).map(it=>{const m=Math.max(...it.sets.filter(s=>s.done&&s.w).map(s=>+s.w));return EX[it.ex].n+' '+m+'kg'}).join('・');
+    h+=`<div class="panel hist-item"><div class="d"><b class="num">${dt.getDate()}</b><small>${dt.getMonth()+1} 月</small></div>
+      <div><h3>${esc(x.title)}</h3><p>${n} 組・${x.dur} 分鐘・${Math.round(v)} kg</p>${best?`<p>${esc(best)}</p>`:''}</div><span></span></div>`;
+  });
+  return h+`</div>`;
+}
+
+/* ---------- 場館 ---------- */
+function renderInfo(){
+  return `<section class="panel info stack">
+    <h2 style="font-size:20px">高雄市小港運動中心</h2>
+    <dl>
+      <dt>位置</dt><dd>小港森林公園內</dd>
+      <dt>2F</dt><dd>健身中心，300 多坪，95 台器材：18 台跑步機、滑步機、腳踏車和重訓器械（有胸推機），另有女性專區</dd>
+      <dt>3F</dt><dd>自由重量區：深蹲、硬舉、臥推設備</dd>
+      <dt>健身房</dt><dd>每小時：全票 50 元、學生 40 元、半票 25 元</dd>
+      <dt>早上 8–10 點</dt><dd>公益時段（長者免費），可能比較多人</dd>
+    </dl>
+  </section>
+  <h2 class="sec">器材說明</h2>
+  <section class="panel stack" style="font-size:14px">
+    <p style="margin:0">館方還沒公開逐台的器材清單。課表裡標 <span class="chip sure">館內確認有</span> 的是新聞報導提到的設備；標 <span class="chip guess">經典器材・現場確認</span> 的是一般健身房的標準器械，可能有也可能沒有。</p>
+    <p style="margin:0">到現場找不到，就在訓練畫面按「換動作」，會換成館內確定有、或徒手就能做的替代動作。</p>
+  </section>
+  <div class="src" style="margin-top:12px">資料來源（2026 年 10 月報導）：
+    <ul>
+      <li><a href="https://news.ltn.com.tw/news/Kaohsiung/paper/1776498">自由時報：小港運動中心本週試營運 11/2開幕</a></li>
+      <li><a href="https://news.ltn.com.tw/news/life/breakingnews/5623002">自由時報：小港運動中心搶先開箱</a></li>
+      <li><a href="https://tw.news.yahoo.com/%E5%B0%8F%E6%B8%AF%E9%81%8B%E5%8B%95%E4%B8%AD%E5%BF%83%E5%95%9F%E7%94%A8-%E8%A8%AD%E7%AB%8B14%E5%BA%A7%E9%81%8B%E5%8B%95%E4%B8%AD%E5%BF%83%E9%81%94%E6%A8%99-084323046.html">NOWnews：小港運動中心啟用</a></li>
+    </ul>
+  </div>`;
+}
+
+/* ---------- render / events ---------- */
+function render(){
+  $('#subtitle').textContent=`減脂保肌・一週 ${S.days} 練`;
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-current',b.dataset.tab===tab?'page':'false'));
+  const v=$('#view');
+  v.innerHTML = tab==='plan'?renderPlan():tab==='workout'?renderWorkout():tab==='history'?renderHistory():renderInfo();
+  tickClock();
+}
+function go(t){tab=t;render();window.scrollTo(0,0);}
+
+let audio=null;
+function beep(){try{if(!audio)return;const o=audio.createOscillator(),g=audio.createGain();o.frequency.value=880;o.connect(g);g.connect(audio.destination);g.gain.setValueAtTime(.2,audio.currentTime);g.gain.exponentialRampToValueAtTime(.001,audio.currentTime+.5);o.start();o.stop(audio.currentTime+.5);}catch(e){}}
+let restEnd=0;
+function startRest(sec){restEnd=Date.now()+sec*1000;$('#rest').classList.add('on');tickClock();}
+function stopRest(){restEnd=0;$('#rest').classList.remove('on');}
+
+let abortArmed=false;
+document.addEventListener('click',ev=>{
+  try{if(!audio){const AC=window.AudioContext||window.webkitAudioContext;if(AC)audio=new AC();}}catch(e){}
+  const tb=ev.target.closest('nav.tabs button'); if(tb){go(tb.dataset.tab);return;}
+  const b=ev.target.closest('[data-act]'); if(!b)return;
+  const a=b.dataset.act, c=S.current;
+  if(a==='days'){S.days=+b.dataset.n;save();render();}
+  else if(a==='tab'){go(b.dataset.t);}
+  else if(a==='goWorkout'){go('workout');}
+  else if(a==='start'){
+    const k=b.dataset.day;
+    if(c&&c.day!==k&&!b.dataset.confirm){b.dataset.confirm='1';b.textContent='已有進行中的訓練，再按一次改練這天';return;}
+    const d=DAYS[k];
+    S.current={day:k,start:Date.now(),swaps:{},swapCardio:false,cardioDone:false,logs:d.items.map(it=>Array.from({length:it[1]},()=>({w:'',r:'',done:false})))};
+    save();go('workout');
+  }
+  else if(a==='swap'){const i=+b.dataset.i;c.swaps[i]=!c.swaps[i];c.logs[i].forEach(s=>{s.w='';s.r='';s.done=false});save();render();}
+  else if(a==='swapCardio'){c.swapCardio=!c.swapCardio;save();render();}
+  else if(a==='tick'){
+    const i=+b.dataset.i,j=+b.dataset.j,s=c.logs[i][j];
+    s.done=!s.done; save();
+    const y=window.scrollY; render(); window.scrollTo(0,y);
+    if(s.done){const it=DAYS[c.day].items[i];startRest(it[3]);}
+  }
+  else if(a==='cardio'){c.cardioDone=!c.cardioDone;save();const y=window.scrollY;render();window.scrollTo(0,y);}
+  else if(a==='finish'){
+    const items=curItems().map(it=>({ex:it.ex,sets:c.logs[it.i]}));
+    S.history.push({date:new Date().toISOString(),day:c.day,title:DAYS[c.day].t,dur:Math.max(1,Math.round((Date.now()-c.start)/60000)),items});
+    S.current=null;stopRest();save();go('history');
+  }
+  else if(a==='abort'){
+    if(!abortArmed){abortArmed=true;b.textContent='確定放棄？再按一次';setTimeout(()=>{abortArmed=false;const x=$('#abortBtn');if(x)x.textContent='放棄這次訓練';},4000);return;}
+    abortArmed=false;S.current=null;stopRest();save();go('plan');
+  }
+});
+document.addEventListener('input',ev=>{
+  const t=ev.target; if(!t.dataset||!t.dataset.k||!S.current)return;
+  S.current.logs[+t.dataset.i][+t.dataset.j][t.dataset.k]=t.value.trim(); save();
+});
+$('#restAdd').addEventListener('click',()=>{restEnd+=30000;tickClock();});
+$('#restSkip').addEventListener('click',stopRest);
+
+function tickClock(){
+  const el=$('#elapsed');
+  if(el&&S.current){const sec=(Date.now()-S.current.start)/1000;el.textContent=fmt(sec);$('#clock').classList.toggle('over',sec>55*60);}
+  if(restEnd){const left=(restEnd-Date.now())/1000;
+    if(left<=0){stopRest();beep();try{navigator.vibrate&&navigator.vibrate([200,100,200]);}catch(e){}}
+    else $('#restT').textContent=fmt(left);}
+}
+setInterval(tickClock,1000);
+render();
+</script>
+</body>
+</html>
