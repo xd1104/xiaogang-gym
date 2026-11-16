@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#F47A2C"/><stop offset="1" stop-color="#E05A10"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g)"/>
+  <!-- runway -->
+  <g fill="#FFFFFF" opacity=".55">
+    <rect x="90" y="374" width="44" height="14" rx="7"/>
+    <rect x="162" y="374" width="44" height="14" rx="7"/>
+    <rect x="234" y="374" width="44" height="14" rx="7"/>
+    <rect x="306" y="374" width="44" height="14" rx="7"/>
+    <rect x="378" y="374" width="44" height="14" rx="7"/>
+  </g>
+  <!-- dumbbell taking off -->
+  <g transform="rotate(-16 256 236)" fill="#FFFFFF">
+    <rect x="112" y="223" width="288" height="26" rx="10"/>
+    <rect x="152" y="160" width="44" height="152" rx="16"/>
+    <rect x="316" y="160" width="44" height="152" rx="16"/>
+    <rect x="106" y="186" width="38" height="100" rx="14"/>
+    <rect x="368" y="186" width="38" height="100" rx="14"/>
+  </g>
+  <!-- motion lines -->
+  <g stroke="#1C232E" stroke-width="10" stroke-linecap="round" opacity=".28">
+    <line x1="44" y1="314" x2="88" y2="302"/>
+    <line x1="56" y1="348" x2="110" y2="333"/>
+  </g>
+</svg>
