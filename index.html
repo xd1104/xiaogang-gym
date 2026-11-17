@@ -7,12 +7,44 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="小港重訓">
 <title>小港重訓手帳</title>
+<!-- Launch splash (same idea as app-template motion/ "white-start"): critical CSS sits before every
+     stylesheet so the first paint never waits on the network. Dark mode only: iOS hands over a white
+     WebView; instead of hard-cutting white -> dark we start at that white and sink into the dark bg. -->
+<style>
+html{background:#F8F6F1}
+@media (prefers-color-scheme:dark){html{background:#13161B}}
+#splash{display:none}
+html.sp-on body{background:transparent}
+html.sp-on #splash{display:flex;position:fixed;inset:0;z-index:999;flex-direction:column;align-items:center;justify-content:center;gap:18px;background:#ebebeb;animation:sp-sink 700ms cubic-bezier(.2,0,0,1) 340ms forwards}
+html.sp-on #splash svg{width:76px;height:76px;opacity:0;transform:scale(.92);animation:sp-emerge 600ms cubic-bezier(.2,0,0,1) 340ms forwards}
+html.sp-on #splash b{font:700 20px -apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;color:#ECEEF2;opacity:0;animation:sp-fade 420ms ease 1040ms forwards}
+html.sp-on #splash.out{opacity:0;transition:opacity 280ms ease}
+@keyframes sp-sink{to{background:#13161B}}
+@keyframes sp-emerge{to{opacity:1;transform:none}}
+@keyframes sp-fade{to{opacity:1}}
+@media (prefers-reduced-motion:reduce){
+  html.sp-on #splash{animation:none;background:#13161B}
+  html.sp-on #splash svg,html.sp-on #splash b{animation:none;opacity:1;transform:none}
+}
+</style>
+<script>
+(function(){
+  var d=document.documentElement;
+  try{if(sessionStorage.getItem('xg-sp'))return;sessionStorage.setItem('xg-sp','1');}catch(e){}
+  if(!window.matchMedia||!matchMedia('(prefers-color-scheme:dark)').matches)return;
+  d.classList.add('sp-on');
+  window.__spT0=Date.now();
+  setTimeout(function(){d.classList.remove('sp-on');},4000); /* failsafe */
+})();
+</script>
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet">
+<!-- non-blocking: first paint must not wait for Google Fonts -->
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet" media="print" onload="this.media='all'">
+<noscript><link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Noto+Sans+TC:wght@400;500;700;900&display=swap" rel="stylesheet"></noscript>
 <style>
 /* Layout idea: a pocket logbook shared by a few people. Ivory + runway orange from the building's palette; one chip per person at the top, plan generated from each person's own body data. */
 :root{
@@ -186,6 +218,10 @@ nav.tabs button[aria-current="page"]{color:var(--accent)}
 </style>
 </head>
 <body>
+<div id="splash" aria-hidden="true">
+  <svg viewBox="0 0 512 512"><defs><linearGradient id="spg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#F47A2C"/><stop offset="1" stop-color="#E05A10"/></linearGradient></defs><rect width="512" height="512" rx="112" fill="url(#spg)"/><g fill="#FFFFFF" opacity=".55"><rect x="90" y="374" width="44" height="14" rx="7"/><rect x="162" y="374" width="44" height="14" rx="7"/><rect x="234" y="374" width="44" height="14" rx="7"/><rect x="306" y="374" width="44" height="14" rx="7"/><rect x="378" y="374" width="44" height="14" rx="7"/></g><g transform="rotate(-16 256 236)" fill="#FFFFFF"><rect x="112" y="223" width="288" height="26" rx="10"/><rect x="152" y="160" width="44" height="152" rx="16"/><rect x="316" y="160" width="44" height="152" rx="16"/><rect x="106" y="186" width="38" height="100" rx="14"/><rect x="368" y="186" width="38" height="100" rx="14"/></g></svg>
+  <b>小港重訓手帳</b>
+</div>
 <div class="wrap">
   <header class="top">
     <h1>小港<span>重訓</span>手帳</h1>
@@ -622,6 +658,16 @@ function tickClock(){
 }
 setInterval(tickClock,1000);
 render();
+(function(){ /* launch splash: keep theme-color in step with the sinking bg, then fade out */
+  const d=document.documentElement, sp=document.getElementById('splash');
+  if(!d.classList.contains('sp-on')||!sp){if(sp)sp.remove();return;}
+  const meta=document.querySelector('meta[name="theme-color"]'), orig=meta&&meta.content;
+  let live=true;
+  (function track(){if(!live)return; if(meta)meta.content=getComputedStyle(sp).backgroundColor; requestAnimationFrame(track);})();
+  const reduce=matchMedia('(prefers-reduced-motion:reduce)').matches;
+  const wait=Math.max(0,(reduce?300:1490)-(Date.now()-(window.__spT0||Date.now())));
+  setTimeout(()=>{sp.classList.add('out'); setTimeout(()=>{live=false; if(meta)meta.content=orig; d.classList.remove('sp-on'); sp.remove();},300);},wait);
+})();
 </script>
 </body>
 </html>
