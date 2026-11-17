@@ -310,6 +310,13 @@ const INJ = {
   shoulder:{n:'肩膀',rep:{shoulderpress:'revfly',lateral:'revfly',pecdeck:null,triceps:null},cue:{chestpress:'肩膀不適：推的範圍縮小，回來時手肘不要超過身體。',pulldown:'肩膀不適：拉到下巴高度就好，絕對不要拉到頸後。'},why:'肩膀不適：拿掉肩推、側平舉、蝴蝶機和三頭下壓，改練肩膀後側穩定的反向蝴蝶機。'}
 };
 const WARM = 6;
+/* 90 分鐘以上：時間夠就多排幾個動作（依當天部位）、多一組、有氧拉長 */
+const EXTRA = {
+  F:['cablerow','pecdeck','lateral','legext','glutebridge','revfly','triceps','bicurl'],
+  U:['pecdeck','lateral','revfly','triceps','bicurl','assist','pushup'],
+  L:['legext','glutebridge','clamshell','abductor','legcurl','crunch','plank']
+};
+const LONG_CARDIO = {fat:60,muscle:25,tone:45,health:45};
 
 /* ================= 依個人資料產生課表 ================= */
 function bmiOf(p){return p.w/Math.pow(p.h/100,2);}
@@ -333,7 +340,7 @@ function generate(p){
       p.inj.forEach(x=>{ if(r && Object.prototype.hasOwnProperty.call(INJ[x].rep,r)) r=INJ[x].rep[r]; });
       if(r && !ids.includes(r)) ids.push(r);
     });
-    const items=ids.map((id,i)=>{
+    const mk=(id,i)=>{
       const e=EX[id]; const c=[];
       p.inj.forEach(x=>{ if(INJ[x].cue[id]) c.push(INJ[x].cue[id]); });
       const lvl=p.exp==='new'?0:1;
@@ -341,7 +348,8 @@ function generate(p){
       if(e.kind==='bw') return {ex:id,sets,reps:BW_REPS[id][lvl],rest:Math.min(rest,60),warn:c};
       let s=sets; if(p.goal==='muscle'&&p.exp==='pro'&&i<2) s=4;
       return {ex:id,sets:s,reps,rest,warn:c};
-    });
+    };
+    const items=ids.map(mk);
     const d={key:k,t:TPL[k].t,f:TPL[k].f,items,cardio:{ex:rot[di%rot.length],min:g.cardio}};
     // 依每次可運動時間調整
     while(estMin(d)>p.mins && d.items.length>4){
@@ -351,9 +359,31 @@ function generate(p){
     }
     while(estMin(d)>p.mins && d.cardio.min>10) d.cardio.min-=5;
     while(estMin(d)+5<=p.mins && d.cardio.min<g.cmax) d.cardio.min+=5;
+    if(p.mins>=90){
+      const fits=()=>estMin(d)<=p.mins;
+      // 1) 依當天部位多排幾個動作（核心動作留在最後）
+      for(const id0 of EXTRA[k[0]==='U'?'U':k[0]==='L'?'L':'F']){
+        if(d.items.length>=9) break;
+        let r=id0;
+        p.inj.forEach(x=>{ if(r && Object.prototype.hasOwnProperty.call(INJ[x].rep,r)) r=INJ[x].rep[r]; });
+        if(!r || d.items.some(it=>it.ex===r)) continue;
+        let at=d.items.findIndex(it=>EX[it.ex].kind==='core'||it.ex==='crunch'); if(at<0) at=d.items.length;
+        d.items.splice(at,0,mk(r,at));
+        if(!fits()) d.items.splice(at,1);
+      }
+      // 2) 器械動作多做一組
+      const maxSets=p.exp==='new'?3:4;
+      let grew=true;
+      while(grew){ grew=false;
+        for(const it of d.items){ if(EX[it.ex].kind!=='m'||it.sets>=maxSets) continue; it.sets++; if(fits()) grew=true; else it.sets--; }
+      }
+      // 3) 剩下的時間給有氧
+      while(estMin(d)+5<=p.mins && d.cardio.min<LONG_CARDIO[p.goal]) d.cardio.min+=5;
+    }
     return d;
   });
   why.push(`每次可以運動 ${p.mins} 分鐘：動作數和有氧時間都調整到這個長度以內（含 ${WARM} 分鐘熱身）。`);
+  if(p.mins>=90) why.push(`時間比較長：多排幾個動作、每個器械多做一組、有氧拉長；剩下的時間留給排隊等器械、喝水和伸展。`);
   return {days,why};
 }
 
@@ -407,7 +437,7 @@ function renderForm(p){
     <fieldset><legend>最主要的目標</legend><div class="opts">${Object.entries(GOALS).map(([k,g])=>opt('goal',k,g.n,p.goal===k)).join('')}</div></fieldset>
     <fieldset><legend>重訓經驗</legend><div class="opts">${Object.entries(EXP).map(([k,n])=>opt('exp',k,n,p.exp===k)).join('')}</div></fieldset>
     <fieldset><legend>一週去幾天</legend><div class="opts">${[2,3,4].map(n=>opt('days',n,n+' 天',p.days===n)).join('')}</div></fieldset>
-    <fieldset><legend>每次大概多久</legend><div class="opts">${[45,60,75].map(n=>opt('mins',n,n+' 分',p.mins===n,'radio',n===60?'剛好 1 小時票':'')).join('')}</div></fieldset>
+    <fieldset><legend>每次大概多久</legend><div class="opts">${[45,60,75,90,120].map(n=>opt('mins',n,n===120?'2 小時':n+' 分',p.mins===n,'radio',n===60?'剛好 1 小時票':'')).join('')}</div></fieldset>
     <fieldset><legend>哪裡受過傷或會痛？（可複選，沒有就不用勾）</legend><div class="opts">${Object.entries(INJ).map(([k,x])=>opt('inj',k,x.n,p.inj.includes(k),'checkbox')).join('')}</div></fieldset>
     <p class="err" id="formErr" role="alert"></p>
     <button class="btn primary block" type="submit">${isNew?'產生我的課表':'儲存並重新排課表'}</button>
