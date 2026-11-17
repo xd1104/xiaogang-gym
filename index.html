@@ -688,6 +688,21 @@ function tickClock(){
 }
 setInterval(tickClock,1000);
 render();
+/* 自動更新：主畫面 App 會留舊版快取；開啟／切回來時偷看線上版本，有新版就重新載入 */
+const APP_VER='2026-11-17c';
+function checkUpdate(){
+  fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
+    const m=t.match(/const APP_VER='([^']+)'/);
+    if(!m||m[1]===APP_VER) return;
+    const busy=editing||!P()||(document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName));
+    let tried=''; try{tried=sessionStorage.getItem('xg-upd')||'';}catch(e){}
+    if(busy||tried===m[1]) return; // 同一版只試一次，避免快取沒過期時無限重載
+    try{sessionStorage.setItem('xg-upd',m[1]);}catch(e){}
+    location.replace('./?u='+encodeURIComponent(m[1]));
+  }).catch(()=>{});
+}
+checkUpdate();
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') checkUpdate(); });
 (function(){ /* launch splash: keep theme-color in step with the sinking bg, then fade out */
   const d=document.documentElement, sp=document.getElementById('splash');
   if(!d.classList.contains('sp-on')||!sp){if(sp)sp.remove();return;}
