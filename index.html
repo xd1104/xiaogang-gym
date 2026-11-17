@@ -171,10 +171,12 @@ h2.sec{font-size:15px;color:var(--muted);font-weight:700;margin:20px 0 10px;lett
 .ex .presc b{color:var(--ink);font-size:20px}
 .cue{font-size:14px;color:var(--muted);margin:0;padding-left:10px;border-left:3px solid var(--line)}
 .cue.warn{color:var(--warn);border-left-color:var(--warn)}
+.cue.sug{color:var(--accent);border-left-color:var(--accent)}
 .last{font-size:13px;color:var(--ok);font-weight:500}
 .sets{display:flex;flex-direction:column;gap:6px}
 .set{display:grid;grid-template-columns:34px 1fr 1fr 52px;gap:6px;align-items:center}
 .set .n{font-family:var(--display);font-size:18px;color:var(--muted);text-align:center}
+.set.hd small{text-align:center;color:var(--muted);font-size:12px}
 .set input{width:100%;min-height:44px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink);font:600 18px var(--display);text-align:center;padding:0 6px}
 .set input::placeholder{color:var(--muted);font-family:var(--body);font-size:13px;font-weight:400}
 .tick{min-height:44px;border-radius:10px;border:2px solid var(--line);background:var(--surface);cursor:pointer;font-weight:900;font-size:18px;color:var(--muted)}
@@ -387,6 +389,40 @@ function generate(p){
   return {days,why};
 }
 
+/* ================= 建議重量：第一次依體重保守估，之後依上次表現自動加減一格 ================= */
+const START = {legpress:.6,chestpress:.3,pulldown:.4,assist:.6,cablerow:.4,shoulderpress:.2,lateral:.1,pecdeck:.2,revfly:.1,legcurl:.25,legext:.25,abductor:.3,crunch:.2,triceps:.15,bicurl:.12};
+const BIG = ['legpress','chestpress','pulldown','assist','cablerow','abductor'];
+const stepOf=id=>BIG.includes(id)?5:2.5;
+const roundW=(id,w)=>{const s=stepOf(id);return Math.max(s,Math.round(w/s)*s);};
+function repRange(str){const m=String(str).match(/\d+/g);if(!m)return null;return [+m[0],+(m[1]||m[0])];}
+function lastLog(p,id){
+  for(let i=p.history.length-1;i>=0;i--){
+    const it=p.history[i].items.find(x=>x.ex===id);
+    if(it){const done=it.sets.filter(s=>s.done);if(done.length)return done;}
+  }
+  return null;
+}
+function suggest(p,id,reps){
+  const e=EX[id], rr=repRange(reps);
+  if(e.kind!=='m') return {w:'',r:rr?String(rr[0]):'',note:''};
+  const L=lastLog(p,id), ws=L?L.map(s=>parseFloat(s.w)).filter(x=>x>0):[];
+  if(!ws.length){
+    const f=(p.sex==='f'?.6:1)*({new:1,some:1.25,pro:1.5}[p.exp]||1)*(p.age>=50?.85:1);
+    return {w:String(roundW(id,p.w*START[id]*f)),r:String(rr[1]),note:'',first:true};
+  }
+  const base=ws[ws.length-1], rs=L.map(s=>parseInt(s.r)).filter(x=>x>0), inv=id==='assist'?-1:1, st=stepOf(id);
+  if(rs.length===L.length&&Math.min(...rs)>=rr[1])
+    return {w:String(Math.max(st,base+inv*st)),r:String(rr[0]),note:`上次每組都做到 ${rr[1]} 下，${inv>0?'加':'減'}一格`+(inv<0?'（輔助配重越輕越難）':'')};
+  if(rs.length&&Math.min(...rs)<rr[0])
+    return {w:String(Math.max(st,base-inv*st)),r:String(rr[1]),note:`上次有一組不到 ${rr[0]} 下，${inv>0?'減':'加'}一格`};
+  return {w:String(base),r:String(rr[1]),note:`跟上次一樣重，這次每組拚到 ${rr[1]} 下`};
+}
+function fillSug(p,c,i){
+  const it=c.items[i], id=c.swaps[i]?EX[it.ex].alt:it.ex, sg=suggest(p,id,it.reps);
+  c.sug=c.sug||{}; c.sug[i]=sg;
+  c.logs[i].forEach(s=>{ if(!s.done&&!s.w&&!s.r){s.w=sg.w;s.r=sg.r;} });
+}
+
 function nutrition(p){
   const bmr=10*p.w+6.25*p.h-5*p.age+(p.sex==='m'?5:-161);
   const act={2:1.375,3:1.45,4:1.55}[p.days];
@@ -490,8 +526,8 @@ function renderPlan(){
   <h2 class="sec">基本原則</h2>
   <section class="panel notes">
     <div class="note"><b class="k">1</b><p><b>熱身：</b>先騎腳踏車或滑步機 5 分鐘，第一個器械先用很輕的重量做 1 組。</p></div>
-    <div class="note"><b class="k">2</b><p><b>重量怎麼選：</b>做到最後一下時，感覺還能再做 2–3 下的重量最剛好。</p></div>
-    <div class="note"><b class="k">3</b><p><b>什麼時候加重：</b>每一組都做到次數範圍的上限，下次就往下調一格插銷。</p></div>
+    <div class="note"><b class="k">2</b><p><b>重量怎麼選：</b>App 會幫你填好，照著做。做到最後一下時，感覺還能再做 2–3 下最剛好；太輕或太重就直接改數字。</p></div>
+    <div class="note"><b class="k">3</b><p><b>什麼時候加重：</b>App 自動排：每組都做到上限，下次加一格；有一組不到下限，下次減一格。</p></div>
     <div class="note"><b class="k">4</b><p><b>會痛就停：</b>肌肉痠是正常的，但關節刺痛、麻就馬上停，換別的動作。</p></div>
   </section>`;
   return h;
@@ -503,11 +539,14 @@ function renderWorkout(){
   if(!p) return renderForm(null);
   const c=p.current;
   if(!c) return `<div class="panel empty"><p>${esc(p.name)} 目前沒有進行中的訓練。</p><button class="btn primary" type="button" data-act="tab" data-t="plan">到課表挑一天開始</button></div>`;
+  if(!c.sug){c.items.forEach((_,k)=>fillSug(p,c,k));save();} // 舊版開始的訓練也補上建議
   let total=1,done=c.cardioDone?1:0;
   c.items.forEach((it,i)=>{total+=c.logs[i].length;done+=c.logs[i].filter(s=>s.done).length});
+  const anyFirst=Object.values(c.sug).some(s=>s.first);
   let h=`<div class="wk-head"><div><h2>${esc(p.name)}・${esc(c.t)}</h2><div class="label">已完成 <span class="num">${done}/${total}</span></div></div>
     <div class="clock" id="clock"><b class="num" id="elapsed">0:00</b><small>目標 ${p.mins} 分鐘內</small></div></div>
-    <div class="prog" style="margin:10px 0 14px"><i style="width:${Math.round(done/total*100)}%"></i></div><div class="stack">`;
+    <div class="prog" style="margin:10px 0 14px"><i style="width:${Math.round(done/total*100)}%"></i></div><div class="stack">
+    ${anyFirst?`<p class="cue sug">重量和次數已經幫你填好，照著做、做完按 ✓。第一次的重量是用體重估的：第一組太輕（還能多做 5 下以上）或太重，就直接改數字，下次會照你改的排。</p>`:''}`;
   c.items.forEach((it,i)=>{
     const id=c.swaps[i]?EX[it.ex].alt:it.ex, e=EX[id], L=c.logs[i], last=lastFor(p,id);
     const bw=e.kind!=='m';
@@ -518,7 +557,8 @@ function renderWorkout(){
       <p class="cue">${esc(e.cue)}</p>
       ${c.swaps[i]?'':it.warn.map(w=>`<p class="cue warn">${esc(w)}</p>`).join('')}
       ${last?`<div class="last">上次：${esc(last)}</div>`:''}
-      <div class="sets">${L.map((s,j)=>`<div class="set"><span class="n">${j+1}</span>
+      ${c.sug&&c.sug[i]&&c.sug[i].note?`<p class="cue sug">${esc(c.sug[i].note)}</p>`:''}
+      <div class="sets"><div class="set hd"><span></span><small>${bw?'':'公斤'}</small><small>${e.kind==='core'?'秒／下':'次數'}</small><span></span></div>${L.map((s,j)=>`<div class="set"><span class="n">${j+1}</span>
         <input id="w-${i}-${j}" inputmode="decimal" placeholder="${bw?'徒手':'公斤'}" value="${esc(s.w)}" data-i="${i}" data-j="${j}" data-k="w" aria-label="第 ${j+1} 組重量">
         <input id="r-${i}-${j}" inputmode="numeric" placeholder="${e.kind==='core'?'秒/下':'次數'}" value="${esc(s.r)}" data-i="${i}" data-j="${j}" data-k="r" aria-label="第 ${j+1} 組次數">
         <button class="tick" type="button" data-act="tick" data-i="${i}" data-j="${j}" aria-pressed="${!!s.done}" aria-label="完成第 ${j+1} 組">✓</button></div>`).join('')}</div>
@@ -648,9 +688,10 @@ document.addEventListener('click',ev=>{
     if(c&&!arm(b,'start'+i,'已有進行中的訓練，再按一次改練這天',b.textContent))return;
     p.current={idx:i,t:d.t,start:Date.now(),items:d.items,cardio:d.cardio,swaps:{},swapCardio:false,cardioDone:false,
       logs:d.items.map(it=>Array.from({length:it.sets},()=>({w:'',r:'',done:false})))};
+    p.current.items.forEach((_,k)=>fillSug(p,p.current,k));
     save();go('workout');
   }
-  else if(a==='swap'){const i=+b.dataset.i;c.swaps[i]=!c.swaps[i];c.logs[i].forEach(s=>{s.w='';s.r='';s.done=false});save();render();}
+  else if(a==='swap'){const i=+b.dataset.i;c.swaps[i]=!c.swaps[i];c.logs[i].forEach(s=>{s.w='';s.r='';s.done=false});fillSug(p,c,i);save();render();}
   else if(a==='swapCardio'){c.swapCardio=!c.swapCardio;save();render();}
   else if(a==='tick'){
     const i=+b.dataset.i,j=+b.dataset.j,s=c.logs[i][j];
@@ -689,7 +730,7 @@ function tickClock(){
 setInterval(tickClock,1000);
 render();
 /* 自動更新：主畫面 App 會留舊版快取；開啟／切回來時偷看線上版本，有新版就重新載入 */
-const APP_VER='2026-11-17c';
+const APP_VER='2026-11-17d';
 function checkUpdate(){
   fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
     const m=t.match(/const APP_VER='([^']+)'/);
