@@ -172,6 +172,23 @@ h2.sec{font-size:15px;color:var(--muted);font-weight:700;margin:20px 0 10px;lett
 .cue{font-size:14px;color:var(--muted);margin:0;padding-left:10px;border-left:3px solid var(--line)}
 .cue.warn{color:var(--warn);border-left-color:var(--warn)}
 .cue.sug{color:var(--accent);border-left-color:var(--accent)}
+.howbtn{display:flex;align-items:center;gap:12px;width:100%;padding:6px;border:1px solid var(--line);border-radius:12px;background:var(--bg);color:var(--ink);font:inherit;font-weight:700;font-size:15px;cursor:pointer;text-align:left}
+.howbtn img{width:64px;height:64px;object-fit:cover;border-radius:8px;background:var(--line);flex-shrink:0}
+.howbtn span::after{content:' ›';color:var(--accent)}
+.exname{background:none;border:0;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.sheet{position:fixed;inset:0;z-index:60;display:flex;align-items:flex-end;justify-content:center}
+.sheet[hidden]{display:none}
+.sheet-bg{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.sheet-card{position:relative;width:100%;max-width:640px;max-height:92vh;overflow:auto;background:var(--surface);border-radius:18px 18px 0 0;padding:16px 16px calc(20px + env(safe-area-inset-bottom))}
+.sheet-x{position:sticky;top:0;float:right;width:40px;height:40px;border-radius:50%;border:1px solid var(--line);background:var(--surface);color:var(--ink);font-size:18px;cursor:pointer;z-index:1}
+.sheet-card h2{font-size:22px;margin:4px 0 10px}
+.sheet-card .ph{width:100%;max-height:52vh;object-fit:contain;border-radius:12px;background:#000;display:block}
+.sheet-card .credit{font-size:11px;color:var(--muted);margin:4px 0 12px}
+.sheet-card .credit a{color:inherit}
+.sheet-card h4{font-size:15px;margin:14px 0 6px;color:var(--accent)}
+.sheet-card ol,.sheet-card ul{margin:0;padding-left:22px}
+.sheet-card li{margin:4px 0}
+.sheet-card .look{margin:0;font-size:15px}
 .last{font-size:13px;color:var(--ok);font-weight:500}
 .sets{display:flex;flex-direction:column;gap:6px}
 .set{display:grid;grid-template-columns:34px 1fr 1fr 52px;gap:6px;align-items:center}
@@ -244,6 +261,10 @@ nav.tabs button[aria-current="page"]{color:var(--accent)}
   </div>
 </div>
 
+<div class="sheet" id="sheet" hidden><div class="sheet-bg" data-act="closeHow"></div>
+  <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="sheetT"><button class="sheet-x" type="button" data-act="closeHow" aria-label="關閉">✕</button><div id="sheetBody"></div></div>
+</div>
+
 <nav class="tabs" aria-label="主選單">
   <div class="in">
     <button type="button" data-tab="plan"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>課表</button>
@@ -287,6 +308,87 @@ const EX = {
 };
 const CORE_REPS = {plank:['20–30 秒','30–45 秒'],deadbug:['每側 6 下','每側 10 下']};
 const BW_REPS = {glutebridge:['12–15','15–20'],clamshell:['每側 12','每側 15'],pushup:['8–10','10–15'],ytw:['各 8 下','各 10 下']};
+/* ================= 器械用法：認機器（look）、調整（set）、步驟（do）、別這樣（no） ================= */
+const HOW = {
+  legpress:{look:'坐著、背靠斜椅背，前面一塊大踏板，用腳把踏板（或座椅）推開。',
+    set:['椅背調到坐進去時膝蓋約彎成 90 度','插銷插在建議重量'],
+    do:['坐好、背和屁股貼緊椅背，雙手抓旁邊握把','雙腳踩在踏板中間，與肩同寬','用腳跟出力把踏板推開，推到膝蓋快打直（不要鎖死）','慢慢彎膝蓋回來，回到約 90 度再推下一下'],
+    no:['膝蓋往內夾','推到底把膝蓋鎖直','屁股離開椅墊']},
+  chestpress:{look:'坐著，前面兩個握把在胸口高度，往前推。',
+    set:['座椅調到握把對齊胸口中段','插銷插在建議重量'],
+    do:['背貼椅背，雙手握住握把，手肘略低於肩膀','吐氣往前推，推到手臂快打直','吸氣慢慢收回，收到手在胸口旁邊就好'],
+    no:['聳肩','背離開椅背','回來時讓重量「碰」一聲撞回去']},
+  pulldown:{look:'坐著，頭頂上方一根長橫桿，腿上有一個壓腿墊，往下拉。',
+    set:['壓腿墊調到大腿剛好被壓住','插銷插在建議重量'],
+    do:['站起來雙手握橫桿，握距比肩寬一點，再坐下把大腿塞進壓腿墊','胸口挺起、身體微微後仰','手肘往下往後拉，把桿拉到上胸','慢慢放回，手臂伸直再拉下一下'],
+    no:['拉到脖子後面','身體大幅前後晃來借力','只用手臂、肩膀聳起來']},
+  assist:{look:'高高的架子，上方有握把，下面有一塊可以跪或站的踏板；配重是在「幫你」。',
+    set:['插銷插在建議重量：配重越重越輕鬆','先確認踏板能壓下去、會彈回來'],
+    do:['爬上台階雙手握上方握把（握距比肩寬）','膝蓋跪（或腳踩）到踏板上，慢慢讓它承接體重','往上拉，拉到下巴超過握把','慢慢放下到手臂伸直'],
+    no:['下來時一口氣鬆手，踏板會彈','身體甩動借力']},
+  cablerow:{look:'坐著，前面一塊踩腳板，低處有握把（V 字把或橫把），往肚子拉。',
+    set:['坐墊（或胸墊）調到手伸直剛好握到握把','插銷插在建議重量'],
+    do:['坐好，腳踩踏板，膝蓋微彎','握住握把，胸口挺起、背打直','手肘往後拉，把握把拉到肚子，肩胛往後夾','慢慢放回，手臂伸直'],
+    no:['身體往後倒來借力','駝背','聳肩']},
+  shoulderpress:{look:'坐著，握把在肩膀旁邊，往頭頂上推。',
+    set:['座椅調到握把跟肩膀差不多高','插銷插在建議重量'],
+    do:['背貼椅背，雙手握握把','吐氣往上推，推到手臂快打直','慢慢放回到肩膀高度'],
+    no:['腰拱起來、背離開椅背','推到底把手肘鎖死','聳肩']},
+  lateral:{look:'坐著，手臂外側靠著兩片護墊，往兩側抬起來。',
+    set:['座椅調到肩膀對齊機器轉軸','插銷插在建議重量（很輕就夠）'],
+    do:['坐好，手臂外側貼著護墊（或握把）','手肘微彎，往兩側抬到與肩同高','停一下，慢慢放下'],
+    no:['聳肩','抬超過肩膀','甩上去']},
+  pecdeck:{look:'坐著背靠椅背，左右兩邊各一個握把（或手臂墊），往胸前合起來，像在抱一棵大樹。',
+    set:['座椅調到握把跟胸口同高','手臂往後打開時，有一點伸展感就好','插銷插在建議重量'],
+    do:['背貼椅背，雙手握住兩邊握把，手肘微彎','用胸口出力把兩手往前合起來','合起來停一秒，再慢慢打開回去'],
+    no:['打開到肩膀前面拉扯','聳肩','手肘一下彎一下直']},
+  revfly:{look:'通常跟蝴蝶機是同一台：反過來坐，胸口面向椅背，往後打開。',
+    set:['座椅調到握把跟肩膀同高','把手臂轉到「後面」那一格（機器側邊有調整鈕）','插銷插在建議重量（很輕就夠）'],
+    do:['胸口貼著椅背坐，雙手往前握住握把','手肘微彎，往兩側後方打開','打開到手臂跟身體成一直線，停一下','慢慢合回前面'],
+    no:['用甩的','聳肩','胸口離開椅背']},
+  legcurl:{look:'坐著（或趴著），小腿後面壓著一根軟墊，往下彎膝蓋把軟墊勾回來。',
+    set:['椅背調到膝蓋對齊機器轉軸（側邊通常有標記）','小腿墊放在腳跟上方','坐式的：大腿上方壓墊壓住大腿','插銷插在建議重量'],
+    do:['坐好，抓緊兩邊握把','用腳跟把小腿墊往下、往後勾到底','停一下，慢慢放回'],
+    no:['屁股抬起來','放回時太快','膝蓋沒對準轉軸']},
+  legext:{look:'坐著，小腿前面靠著一根軟墊，把腿往前踢直。',
+    set:['椅背調到膝蓋對齊機器轉軸','小腿墊放在腳踝上方','插銷插在建議重量'],
+    do:['坐好，抓緊兩邊握把','把小腿往上踢，踢到膝蓋快打直，頂端停一秒','慢慢放回'],
+    no:['用甩的','屁股離開椅墊','膝蓋會痛還硬做']},
+  abductor:{look:'坐著，兩片護墊靠在膝蓋外側，雙腿往外推開。（同一台常常也能做「往內夾」，這裡做的是往外推）',
+    set:['把護墊轉到膝蓋「外側」','起始角度調到雙腿併攏','插銷插在建議重量'],
+    do:['坐好、背貼椅背，抓緊握把','雙腿往外推開，推到最開停一下','慢慢收回，不要讓重量撞回去'],
+    no:['身體前後晃','收回太快']},
+  crunch:{look:'坐著，胸前或肩膀上有護墊（或頭上方有握把），把上半身往前捲。',
+    set:['座椅調到護墊靠在胸口上方','腳勾好腳墊','插銷插在建議重量（很輕就夠）'],
+    do:['坐好，雙手抓住握把','吐氣，用肚子把上半身往前往下捲','停一下，慢慢回來'],
+    no:['用手拉','脖子往前凹','回來時直接彈回去']},
+  triceps:{look:'一座高高的滑輪架，上方掛一條繩子（或短橫桿），站著往下壓。',
+    set:['滑輪調到最高','掛上繩子（或短桿）','插銷插在建議重量'],
+    do:['面向機器站好，雙手握繩子','手肘夾在身體兩側','只動前臂往下壓，壓到手臂打直，可以把繩子往兩邊分開','慢慢讓前臂回到胸口高度'],
+    no:['手肘跟著往前跑','身體壓上去借力','聳肩']},
+  bicurl:{look:'坐著，上臂靠在前面一塊斜墊上，握把往上彎。',
+    set:['座椅調到上臂整個平貼在墊子上、腋下靠著墊子頂端','插銷插在建議重量'],
+    do:['握住握把，手臂幾乎伸直','往上彎，彎到最高停一下','慢慢放下到手臂快打直'],
+    no:['上臂離開墊子','身體往後仰借力','放下太快']}
+};
+/* 照片：Wikimedia Commons 自由授權，存在 img/<id>.jpg；by/lic/url 用來標示出處 */
+const PHOTO = {
+  legpress:{by:"Sidhsdowungm 23003",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:HK_SKD_TKO_%E6%97%A5%E5%87%BA%E5%BA%B7%E5%9F%8E_Lohas_Park_Malibu_%E6%9C%83%E6%89%80_Clubhouse_%E5%81%A5%E8%BA%AB%E5%AE%A4_Gym_fitness_sport_machines_zone_April_2023_Px3_17.jpg'},
+  chestpress:{by:"Sidhsdowungm 23003",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:HK_SKD_TKO_%E6%97%A5%E5%87%BA%E5%BA%B7%E5%9F%8E_Lohas_Park_Malibu_%E6%9C%83%E6%89%80_Clubhouse_%E5%81%A5%E8%BA%AB%E5%AE%A4_Gym_fitness_sport_machines_zone_April_2023_Px3_30.jpg'},
+  pulldown:{by:"Santeri Viinamäki",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:Lat_pulldown_machine_20180112.jpg'},
+  assist:{by:"Teemeah",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:Dip_and_pull-up_machine.jpg'},
+  cablerow:{by:"Abooyeah",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:Marian-Rows.jpg'},
+  shoulderpress:{by:"GeorgeStepanek",lic:'CC BY-SA 3.0',url:'https://commons.wikimedia.org/wiki/File:ShoulderPressMachineExercise.JPG'},
+  lateral:{by:"Aliva Sahoo",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:Shoulder_Fly_Machine.jpg'},
+  pecdeck:{by:"Sidhsdowungm 23003",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:HK_SKD_TKO_%E6%97%A5%E5%87%BA%E5%BA%B7%E5%9F%8E_Lohas_Park_Malibu_%E6%9C%83%E6%89%80_Clubhouse_%E5%81%A5%E8%BA%AB%E5%AE%A4_Gym_fitness_sport_machines_zone_April_2023_Px3_32.jpg'},
+  revfly:{by:"Sidhsdowungm 23003",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:HK_SKD_TKO_%E6%97%A5%E5%87%BA%E5%BA%B7%E5%9F%8E_Lohas_Park_Malibu_%E6%9C%83%E6%89%80_Clubhouse_%E5%81%A5%E8%BA%AB%E5%AE%A4_Gym_fitness_sport_machines_zone_April_2023_Px3_32.jpg'},
+  legcurl:{by:"GeorgeStepanek",lic:'CC BY-SA 3.0',url:'https://commons.wikimedia.org/wiki/File:LyingLegCurlMachineExercise.JPG'},
+  legext:{by:"Sidhsdowungm 23003",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:HK_SKD_TKO_%E6%97%A5%E5%87%BA%E5%BA%B7%E5%9F%8E_Lohas_Park_Malibu_%E6%9C%83%E6%89%80_Clubhouse_%E5%81%A5%E8%BA%AB%E5%AE%A4_Gym_fitness_sport_machines_zone_April_2023_Px3_35.jpg'},
+  abductor:{by:"Teemeah",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:Hip_abductor_machine.jpg'},
+  crunch:{by:"Sidhsdowungm 23003",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:HK_SKD_TKO_%E6%97%A5%E5%87%BA%E5%BA%B7%E5%9F%8E_Lohas_Park_Malibu_%E6%9C%83%E6%89%80_Clubhouse_%E5%81%A5%E8%BA%AB%E5%AE%A4_Gym_fitness_sport_machines_zone_April_2023_Px3_10.jpg'},
+  triceps:{by:"OriginalFlywheel",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:KPulley2_Triceps_Extension2.jpg'},
+  bicurl:{by:"Aliva Sahoo",lic:'CC BY-SA 4.0',url:'https://commons.wikimedia.org/wiki/File:Bicep_curl_machine.jpg'}
+};
 
 /* ================= 課表範本 ================= */
 const TPL = {
@@ -445,6 +547,21 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt=sec=>{sec=Math.max(0,Math.round(sec));return Math.floor(sec/60)+':'+String(sec%60).padStart(2,'0');};
 const floorChip=f=>f==='2F'?'<span class="chip f2">2F 器械區</span>':'<span class="chip fany">徒手・地墊區</span>';
+const photoOf=id=>PHOTO[id]?`img/${id}.jpg`:'';
+function howBtn(id){const h=HOW[id]; if(!h) return ''; const ph=photoOf(id);
+  return `<button class="howbtn" type="button" data-act="how" data-ex="${id}">${ph?`<img src="${ph}" alt="" loading="lazy">`:''}<span>${ph?'看圖和用法':'看用法'}</span></button>`;}
+function openHow(id){
+  const e=EX[id], h=HOW[id], ph=photoOf(id), cr=PHOTO[id]; if(!e||!h) return;
+  $('#sheetBody').innerHTML=`<h2 id="sheetT">${esc(e.n)}</h2>
+    ${ph?`<img class="ph" src="${ph}" alt="${esc(e.n)}"><p class="credit">照片：<a href="${cr.url}" target="_blank" rel="noopener">${esc(cr.by)}</a>（${esc(cr.lic)}，Wikimedia Commons）・館內機器外觀可能不同</p>`:''}
+    <p class="look">${esc(h.look)}</p>
+    <h4>先調整</h4><ul>${h.set.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+    <h4>怎麼做</h4><ol>${h.do.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
+    <h4>不要這樣</h4><ul>${h.no.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
+  $('#sheet').hidden=false; $('.sheet-card').scrollTop=0; document.body.style.overflow='hidden';
+}
+function closeHow(){$('#sheet').hidden=true; document.body.style.overflow='';}
+document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&!$('#sheet').hidden)closeHow();});
 const sureChip=e=>e.sure?'<span class="chip sure">館內確認有</span>':(e.kind==='m'?'<span class="chip guess">常見器械・現場確認</span>':'');
 
 function lastFor(p,id){
@@ -516,7 +633,7 @@ function renderPlan(){
     h+=`<article class="panel day${i===next?' next':''}">
       <div class="day-head"><div><h2>${esc(d.t)}${i===next?'<span class="tag-next">下次練這天</span>':''}</h2><div class="meta">${esc(d.f)}</div></div>
       <div class="mins"><b class="num">${estMin(d)}</b><small>分鐘</small></div></div>
-      <ul class="exlist">${d.items.map(it=>{const e=EX[it.ex];return `<li><span>${esc(e.n)}${!e.sure?'<i class="dot" title="現場確認"></i>':''}${it.warn.length?' <span class="chip guess">注意</span>':''}</span><span class="sr num">${it.sets}×${esc(it.reps)}</span></li>`}).join('')}
+      <ul class="exlist">${d.items.map(it=>{const e=EX[it.ex];return `<li><span>${HOW[it.ex]?`<button class="exname" type="button" data-act="how" data-ex="${it.ex}">${esc(e.n)}</button>`:esc(e.n)}${!e.sure?'<i class="dot" title="現場確認"></i>':''}${it.warn.length?' <span class="chip guess">注意</span>':''}</span><span class="sr num">${it.sets}×${esc(it.reps)}</span></li>`}).join('')}
       <li><span>${esc(EX[d.cardio.ex].n)}</span><span class="sr">${d.cardio.min} 分</span></li></ul>
       <button class="btn ${i===next?'primary':''} block" type="button" data-act="start" data-day="${i}">開始這天的訓練</button>
     </article>`;
@@ -554,6 +671,7 @@ function renderWorkout(){
       <div class="ex-top"><div class="stack" style="gap:4px"><div class="row">${floorChip(e.f)}${sureChip(e)}</div><h3>${esc(e.n)}</h3></div>
       ${EX[it.ex].alt?`<button class="btn swap" type="button" data-act="swap" data-i="${i}">${c.swaps[i]?'換回':'換動作'}</button>`:''}</div>
       <div class="presc"><b class="num">${it.sets} × ${esc(it.reps)}</b>・休息 ${fmt(it.rest)}</div>
+      ${howBtn(id)}
       <p class="cue">${esc(e.cue)}</p>
       ${c.swaps[i]?'':it.warn.map(w=>`<p class="cue warn">${esc(w)}</p>`).join('')}
       ${last?`<div class="last">上次：${esc(last)}</div>`:''}
@@ -678,6 +796,8 @@ document.addEventListener('click',ev=>{
   const tb=ev.target.closest('nav.tabs button'); if(tb){go(tb.dataset.tab);return;}
   const b=ev.target.closest('[data-act]'); if(!b)return;
   const a=b.dataset.act, p=P(), c=p&&p.current;
+  if(a==='how'){openHow(b.dataset.ex);return;}
+  if(a==='closeHow'){closeHow();return;}
   if(a==='tab') go(b.dataset.t);
   else if(a==='switch'){S.active=b.dataset.id;save();tab=P().current?'workout':'plan';editing=false;stopRest();render();window.scrollTo(0,0);}
   else if(a==='addPerson'){editing='new';tab='me';render();window.scrollTo(0,0);}
@@ -730,7 +850,7 @@ function tickClock(){
 setInterval(tickClock,1000);
 render();
 /* 自動更新：主畫面 App 會留舊版快取；開啟／切回來時偷看線上版本，有新版就重新載入 */
-const APP_VER='2026-11-22a';
+const APP_VER='2026-11-22c';
 function checkUpdate(){
   fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
     const m=t.match(/const APP_VER='([^']+)'/);
