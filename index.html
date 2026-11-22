@@ -189,6 +189,16 @@ h2.sec{font-size:15px;color:var(--muted);font-weight:700;margin:20px 0 10px;lett
 .sheet-card ol,.sheet-card ul{margin:0;padding-left:22px}
 .sheet-card li{margin:4px 0}
 .sheet-card .look{margin:0;font-size:15px}
+.demo{position:relative;aspect-ratio:3/2;border-radius:12px;overflow:hidden;background:#000}
+.demo figure{position:absolute;inset:0;margin:0}
+.demo img{width:100%;height:100%;object-fit:cover;display:block}
+.demo figcaption{position:absolute;left:8px;top:8px;padding:3px 10px;border-radius:999px;background:rgba(0,0,0,.7);color:#fff;font-size:13px;font-weight:700}
+.demo figure.b{animation:demo 3.2s ease-in-out infinite}
+@keyframes demo{0%,38%{opacity:0}50%,88%{opacity:1}100%{opacity:0}}
+@media (prefers-reduced-motion:reduce){.demo{aspect-ratio:auto;display:grid;grid-template-columns:1fr 1fr;gap:4px;background:none}.demo figure{position:relative}.demo figure.b{animation:none}}
+.choice{display:grid;gap:8px;margin-top:6px}
+.choice .btn{justify-content:flex-start;text-align:left}
+.gone h3{text-decoration:line-through;color:var(--muted)}
 .last{font-size:13px;color:var(--ok);font-weight:500}
 .sets{display:flex;flex-direction:column;gap:6px}
 .set{display:grid;grid-template-columns:34px 1fr 1fr 52px;gap:6px;align-items:center}
@@ -421,6 +431,24 @@ const EXTRA = {
   L:['legext','abductor','legcurl','crunch','legpress']
 };
 const LONG_CARDIO = {fat:60,muscle:25,tone:45,health:45};
+/* 館裡沒有的器械：同一間館，所有人共用（S.missing）；依序找練同部位、館裡有的替代 */
+const SUBS = {
+  chestpress:['pecdeck','shoulderpress','triceps'], pecdeck:['chestpress','shoulderpress'],
+  pulldown:['assist','cablerow'], assist:['pulldown','cablerow'], cablerow:['pulldown','assist','revfly'],
+  shoulderpress:['lateral','chestpress','revfly'], lateral:['shoulderpress','revfly'], revfly:['lateral','cablerow'],
+  legpress:['legext','legcurl','abductor'], legcurl:['legpress','abductor'], legext:['legpress','legcurl'], abductor:['legcurl','legpress'],
+  crunch:[], triceps:['chestpress','shoulderpress'], bicurl:['cablerow','pulldown'],
+  treadmill:['elliptical','bike'], elliptical:['bike','treadmill'], bike:['elliptical','treadmill']
+};
+const isMissing=id=>(S.missing||[]).includes(id);
+const injBlocked=(p,id)=>p.inj.some(x=>Object.prototype.hasOwnProperty.call(INJ[x].rep,id));
+function availOf(p,id,used){
+  if(!isMissing(id)) return id;
+  for(const s of SUBS[id]||[]) if(!isMissing(s)&&!used.includes(s)&&!injBlocked(p,s)) return s;
+  return null;
+}
+/* 動作示範照片（起始→結束）：free-exercise-db，公眾領域 */
+const STEP = ['legpress','chestpress','pulldown','cablerow','shoulderpress','pecdeck','revfly','legcurl','legext','abductor','crunch','triceps','bicurl'];
 
 /* ================= 依個人資料產生課表 ================= */
 function bmiOf(p){return p.w/Math.pow(p.h/100,2);}
@@ -436,12 +464,15 @@ function generate(p){
   if(bmi>=30&&!knee) why.push('BMI 偏高：有氧選對膝蓋衝擊小的腳踏車和滑步機，先不用跑步機。');
   p.inj.forEach(k=>why.push(INJ[k].why));
   why.push('全部用插銷式器械：調重量只要換插銷，動作軌跡固定，新手也安全；沒有深蹲和槓鈴。');
-  const rot = lowImpact?['bike','elliptical']:(p.goal==='fat'?['treadmill','elliptical','bike']:['elliptical','bike','treadmill']);
+  let rot = lowImpact?['bike','elliptical']:(p.goal==='fat'?['treadmill','elliptical','bike']:['elliptical','bike','treadmill']);
+  if(rot.some(x=>!isMissing(x))) rot=rot.filter(x=>!isMissing(x));
+  if((S.missing||[]).length) why.push(`館裡沒有：${S.missing.map(x=>EX[x].n).join('、')}，已自動換成練同部位的其他器械。`);
   const days = SPLIT[p.days].map((k,di)=>{
     const ids=[], cues={};
     TPL[k].ex.forEach(id=>{
       let r=id;
       p.inj.forEach(x=>{ if(r && Object.prototype.hasOwnProperty.call(INJ[x].rep,r)) r=INJ[x].rep[r]; });
+      if(r) r=availOf(p,r,[...ids,...TPL[k].ex]);
       if(r && !ids.includes(r)) ids.push(r);
     });
     const mk=(id,i)=>{
@@ -470,6 +501,7 @@ function generate(p){
         if(d.items.length>=9) break;
         let r=id0;
         p.inj.forEach(x=>{ if(r && Object.prototype.hasOwnProperty.call(INJ[x].rep,r)) r=INJ[x].rep[r]; });
+        if(r) r=availOf(p,r,d.items.map(it=>it.ex));
         if(!r || d.items.some(it=>it.ex===r)) continue;
         let at=d.items.findIndex(it=>EX[it.ex].kind==='core'||it.ex==='crunch'); if(at<0) at=d.items.length;
         d.items.splice(at,0,mk(r,at));
@@ -519,8 +551,10 @@ function suggest(p,id,reps){
     return {w:String(Math.max(st,base-inv*st)),r:String(rr[1]),note:`上次有一組不到 ${rr[0]} 下，${inv>0?'減':'加'}一格`};
   return {w:String(base),r:String(rr[1]),note:`跟上次一樣重，這次每組拚到 ${rr[1]} 下`};
 }
+/* 訓練中第 i 個動作現在做哪台：swaps[i] 是器械 id（新版）或 true（舊版＝EX.alt） */
+function curId(c,i){const s=c.swaps[i];return typeof s==='string'?s:(s?EX[c.items[i].ex].alt:c.items[i].ex);}
 function fillSug(p,c,i){
-  const it=c.items[i], id=c.swaps[i]?EX[it.ex].alt:it.ex, sg=suggest(p,id,it.reps);
+  const it=c.items[i], id=curId(c,i); if(!id) return; const sg=suggest(p,id,it.reps);
   c.sug=c.sug||{}; c.sug[i]=sg;
   c.logs[i].forEach(s=>{ if(!s.done&&!s.w&&!s.r){s.w=sg.w;s.r=sg.r;} });
 }
@@ -556,11 +590,23 @@ function openHow(id){
     ${ph?`<img class="ph" src="${ph}" alt="${esc(e.n)}"><p class="credit">照片：<a href="${cr.url}" target="_blank" rel="noopener">${esc(cr.by)}</a>（${esc(cr.lic)}，Wikimedia Commons）・館內機器外觀可能不同</p>`:''}
     <p class="look">${esc(h.look)}</p>
     <h4>先調整</h4><ul>${h.set.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+    ${STEP.includes(id)?`<h4>動作示範</h4><div class="demo"><figure class="a"><img src="img/step/${id}-0.jpg" alt="${esc(e.n)} 開始姿勢"><figcaption>① 開始</figcaption></figure><figure class="b"><img src="img/step/${id}-1.jpg" alt="${esc(e.n)} 做到這裡"><figcaption>② 做到這裡</figcaption></figure></div>
+    <p class="credit">示範照片：<a href="https://github.com/yuhonas/free-exercise-db" target="_blank" rel="noopener">free-exercise-db</a>（公眾領域）</p>`:''}
     <h4>怎麼做</h4><ol>${h.do.map(x=>`<li>${esc(x)}</li>`).join('')}</ol>
     <h4>不要這樣</h4><ul>${h.no.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>`;
   $('#sheet').hidden=false; $('.sheet-card').scrollTop=0; document.body.style.overflow='hidden';
 }
 function closeHow(){$('#sheet').hidden=true; document.body.style.overflow='';}
+/* 換動作選單：有人在用就這次換；館裡沒有就記下來，以後課表都不排 */
+function openSwap(p,c,i){
+  const it=c.items[i], cur=curId(c,i), used=c.items.map((_,k)=>k===i?'':curId(c,k));
+  const opts=[it.ex,...(SUBS[it.ex]||[])].filter(x=>x!==cur&&!isMissing(x)&&!used.includes(x)&&(x===it.ex||!injBlocked(p,x)));
+  $('#sheetBody').innerHTML=`<h2 id="sheetT">換掉「${esc(cur?EX[cur].n:EX[it.ex].n)}」</h2>
+    ${opts.length?`<p class="look">有人在用：這次先改做</p><div class="choice">${opts.map(x=>`<button class="btn block" type="button" data-act="swapTo" data-i="${i}" data-ex="${x}">${x===it.ex?'換回 ':''}${esc(EX[x].n)}</button>`).join('')}</div>`:''}
+    ${cur?`<p class="look" style="margin-top:16px">館裡根本沒有這台</p><div class="choice"><button class="btn block danger" type="button" data-act="miss" data-i="${i}">館裡沒有「${esc(EX[cur].n)}」，以後都不排</button></div>
+    <p class="label" style="margin-top:6px">同一間館，所有人的課表都會一起換掉；按錯可以到「我的資料」恢復。</p>`:''}`;
+  $('#sheet').hidden=false; $('.sheet-card').scrollTop=0; document.body.style.overflow='hidden';
+}
 document.addEventListener('keydown',ev=>{if(ev.key==='Escape'&&!$('#sheet').hidden)closeHow();});
 const sureChip=e=>e.sure?'<span class="chip sure">館內確認有</span>':(e.kind==='m'?'<span class="chip guess">常見器械・現場確認</span>':'');
 
@@ -639,7 +685,7 @@ function renderPlan(){
     </article>`;
   });
   h+=`</div>
-  <div class="legend" style="margin-top:12px"><span><i class="dot" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--warn)"></i> 常見器械，到現場確認有沒有；沒有就在訓練畫面按「換動作」</span></div>
+  <div class="legend" style="margin-top:12px"><span><i class="dot" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--warn)"></i> 常見器械，到現場確認有沒有；沒有就在訓練畫面按「換動作」→「館裡沒有」，以後課表會自動換掉</span></div>
   <h2 class="sec">基本原則</h2>
   <section class="panel notes">
     <div class="note"><b class="k">1</b><p><b>熱身：</b>先騎腳踏車或滑步機 5 分鐘，第一個器械先用很輕的重量做 1 組。</p></div>
@@ -658,22 +704,25 @@ function renderWorkout(){
   if(!c) return `<div class="panel empty"><p>${esc(p.name)} 目前沒有進行中的訓練。</p><button class="btn primary" type="button" data-act="tab" data-t="plan">到課表挑一天開始</button></div>`;
   if(!c.sug){c.items.forEach((_,k)=>fillSug(p,c,k));save();} // 舊版開始的訓練也補上建議
   let total=1,done=c.cardioDone?1:0;
-  c.items.forEach((it,i)=>{total+=c.logs[i].length;done+=c.logs[i].filter(s=>s.done).length});
+  c.items.forEach((it,i)=>{if(curId(c,i)===''&&!c.logs[i].some(s=>s.done))return;total+=c.logs[i].length;done+=c.logs[i].filter(s=>s.done).length});
   const anyFirst=Object.values(c.sug).some(s=>s.first);
   let h=`<div class="wk-head"><div><h2>${esc(p.name)}・${esc(c.t)}</h2><div class="label">已完成 <span class="num">${done}/${total}</span></div></div>
     <div class="clock" id="clock"><b class="num" id="elapsed">0:00</b><small>目標 ${p.mins} 分鐘內</small></div></div>
     <div class="prog" style="margin:10px 0 14px"><i style="width:${Math.round(done/total*100)}%"></i></div><div class="stack">
     ${anyFirst?`<p class="cue sug">重量和次數已經幫你填好，照著做、做完按 ✓。第一次的重量是用體重估的：第一組太輕（還能多做 5 下以上）或太重，就直接改數字，下次會照你改的排。</p>`:''}`;
   c.items.forEach((it,i)=>{
-    const id=c.swaps[i]?EX[it.ex].alt:it.ex, e=EX[id], L=c.logs[i], last=lastFor(p,id);
+    const id=curId(c,i);
+    if(id===''){h+=`<article class="panel ex gone"><div class="ex-top"><h3>${esc(EX[it.ex].n)}</h3><button class="btn swap" type="button" data-act="unmissNow" data-i="${i}">其實有</button></div>
+      <p class="cue">館裡沒有，也沒有其他器械可以替代，今天跳過。</p></article>`;return;}
+    const e=EX[id], L=c.logs[i], last=lastFor(p,id);
     const bw=e.kind!=='m';
     h+=`<article class="panel ex${L.every(s=>s.done)?' done':''}">
-      <div class="ex-top"><div class="stack" style="gap:4px"><div class="row">${floorChip(e.f)}${sureChip(e)}</div><h3>${esc(e.n)}</h3></div>
-      ${EX[it.ex].alt?`<button class="btn swap" type="button" data-act="swap" data-i="${i}">${c.swaps[i]?'換回':'換動作'}</button>`:''}</div>
+      <div class="ex-top"><div class="stack" style="gap:4px"><div class="row">${floorChip(e.f)}${sureChip(e)}</div><h3>${esc(e.n)}</h3>${id!==it.ex?`<small class="label">原本：${esc(EX[it.ex].n)}</small>`:''}</div>
+      <button class="btn swap" type="button" data-act="swap" data-i="${i}">換動作</button></div>
       <div class="presc"><b class="num">${it.sets} × ${esc(it.reps)}</b>・休息 ${fmt(it.rest)}</div>
       ${howBtn(id)}
       <p class="cue">${esc(e.cue)}</p>
-      ${c.swaps[i]?'':it.warn.map(w=>`<p class="cue warn">${esc(w)}</p>`).join('')}
+      ${id!==it.ex?'':it.warn.map(w=>`<p class="cue warn">${esc(w)}</p>`).join('')}
       ${last?`<div class="last">上次：${esc(last)}</div>`:''}
       ${c.sug&&c.sug[i]&&c.sug[i].note?`<p class="cue sug">${esc(c.sug[i].note)}</p>`:''}
       <div class="sets"><div class="set hd"><span></span><small>${bw?'':'公斤'}</small><small>${e.kind==='core'?'秒／下':'次數'}</small><span></span></div>${L.map((s,j)=>`<div class="set"><span class="n">${j+1}</span>
@@ -743,7 +792,8 @@ function renderMe(){
         <dt>票價</dt><dd>健身房每小時：全票 50 元、學生 40 元、半票 25 元</dd>
         <dt>8–10 點</dt><dd>公益時段（長者免費），可能比較多人</dd>
       </dl>
-      <p class="label" style="margin:0">館方還沒公開逐台的器材清單。除了胸推機和有氧器材是報導確認的，其他器械都是一般健身房的常見機台，找不到就按「換動作」。</p>
+      <p class="label" style="margin:0">館方還沒公開逐台的器材清單。除了胸推機和有氧器材是報導確認的，其他器械都是一般健身房的常見機台，找不到就按「換動作」→「館裡沒有」。</p>
+      ${(S.missing||[]).length?`<h4 style="margin:6px 0 0;font-size:15px">館裡沒有的器械（大家共用）</h4><ul class="exlist">${S.missing.map(x=>`<li><span>${esc(EX[x].n)}</span><button class="btn swap" type="button" data-act="unmiss" data-ex="${x}">其實有</button></li>`).join('')}</ul>`:''}
       <div class="src">資料來源（2026 年 10 月報導）：<ul>
         <li><a href="https://news.ltn.com.tw/news/Kaohsiung/paper/1776498">自由時報：小港運動中心本週試營運</a></li>
         <li><a href="https://news.ltn.com.tw/news/life/breakingnews/5623002">自由時報：小港運動中心搶先開箱</a></li>
@@ -811,7 +861,23 @@ document.addEventListener('click',ev=>{
     p.current.items.forEach((_,k)=>fillSug(p,p.current,k));
     save();go('workout');
   }
-  else if(a==='swap'){const i=+b.dataset.i;c.swaps[i]=!c.swaps[i];c.logs[i].forEach(s=>{s.w='';s.r='';s.done=false});fillSug(p,c,i);save();render();}
+  else if(a==='swap'){openSwap(p,c,+b.dataset.i);}
+  else if(a==='swapTo'||a==='miss'||a==='unmissNow'){
+    const i=+b.dataset.i, it=c.items[i];
+    const setTo=(k,to)=>{c.swaps[k]=to;c.logs[k].forEach(s=>{s.w='';s.r='';s.done=false});if(to)fillSug(p,c,k);};
+    if(a==='swapTo') setTo(i,b.dataset.ex);
+    else if(a==='unmissNow'){S.missing=(S.missing||[]).filter(x=>x!==it.ex);setTo(i,it.ex);}
+    else{
+      const gone=curId(c,i); S.missing=[...new Set([...(S.missing||[]),gone])];
+      // 今天的訓練裡做這台的都換掉（沒做過的才換）
+      c.items.forEach((x,k)=>{ if(curId(c,k)!==gone||c.logs[k].some(s=>s.done)) return;
+        const used=c.items.map((_,m)=>m===k?'':curId(c,m));
+        const to=[x.ex,...(SUBS[x.ex]||[])].find(y=>!isMissing(y)&&!used.includes(y)&&(y===x.ex||!injBlocked(p,y)));
+        setTo(k,to||''); });
+    }
+    closeHow();save();keepScroll();
+  }
+  else if(a==='unmiss'){S.missing=(S.missing||[]).filter(x=>x!==b.dataset.ex);save();keepScroll();}
   else if(a==='swapCardio'){c.swapCardio=!c.swapCardio;save();render();}
   else if(a==='tick'){
     const i=+b.dataset.i,j=+b.dataset.j,s=c.logs[i][j];
@@ -820,7 +886,7 @@ document.addEventListener('click',ev=>{
   }
   else if(a==='cardio'){c.cardioDone=!c.cardioDone;save();keepScroll();}
   else if(a==='finish'){
-    const items=c.items.map((it,i)=>({ex:c.swaps[i]?EX[it.ex].alt:it.ex,sets:c.logs[i]}));
+    const items=c.items.map((it,i)=>({ex:curId(c,i),sets:c.logs[i]})).filter(x=>x.ex);
     p.history.push({date:new Date().toISOString(),title:c.t,dur:Math.max(1,Math.round((Date.now()-c.start)/60000)),cardio:c.cardioDone,items});
     p.next=c.idx+1; p.current=null; stopRest(); save(); go('history');
   }
@@ -850,7 +916,7 @@ function tickClock(){
 setInterval(tickClock,1000);
 render();
 /* 自動更新：主畫面 App 會留舊版快取；開啟／切回來時偷看線上版本，有新版就重新載入 */
-const APP_VER='2026-11-22c';
+const APP_VER='2026-11-22d';
 function checkUpdate(){
   fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
     const m=t.match(/const APP_VER='([^']+)'/);
