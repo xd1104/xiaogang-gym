@@ -199,6 +199,17 @@ h2.sec{font-size:15px;color:var(--muted);font-weight:700;margin:20px 0 10px;lett
 .choice{display:grid;gap:8px;margin-top:6px}
 .choice .btn{justify-content:flex-start;text-align:left}
 .gone h3{text-decoration:line-through;color:var(--muted)}
+.cyc{display:grid;grid-template-columns:repeat(5,1fr);gap:4px}
+.cyc i{height:8px;border-radius:4px;background:var(--line)}
+.cyc i.past{background:var(--muted)}
+.cyc i.now{background:var(--accent)}
+.cyc i.dl{outline:1px dashed var(--muted);outline-offset:1px}
+.vol{display:grid;grid-template-columns:3em 1fr 2.4em;gap:6px 8px;align-items:center;font-size:14px}
+.vol .num{text-align:right}
+.vol .bar{position:relative;height:10px;border-radius:5px;background:var(--line)}
+.vol .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:5px;background:var(--warn)}
+.vol .bar i.ok{background:var(--ok)}
+.vol .bar em{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink);opacity:.5}
 .last{font-size:13px;color:var(--ok);font-weight:500}
 .sets{display:flex;flex-direction:column;gap:6px}
 .set{display:grid;grid-template-columns:34px 1fr 1fr 52px;gap:6px;align-items:center}
@@ -447,6 +458,29 @@ function availOf(p,id,used){
   for(const s of SUBS[id]||[]) if(!isMissing(s)&&!used.includes(s)&&!injBlocked(p,s)) return s;
   return null;
 }
+/* 週期化：每 5 週一輪（依實際練的次數算週，不看日曆，漏練不會跳週）
+   第 1–2 週打底、第 3–4 週加量（每台多一組）、第 5 週放鬆（組數少、重量輕一格）。
+   新手第一輪 2→3 組；之後各輪 3→4 組。 */
+const PHASES=[{n:'打底'},{n:'打底'},{n:'加量'},{n:'加量'},{n:'放鬆',deload:true}];
+function phaseOf(p){
+  const n=Math.max(0,p.history.length-(p.cycleStart||0)), wk=Math.min(4,Math.floor(n/p.days));
+  const lv=(p.exp==='new'&&(p.cycleNo||1)===1)?0:1;
+  const cap=PHASES[wk].deload?2:(lv===0?[2,2,3,3]:[3,3,4,4])[wk];
+  return {wk,cycle:p.cycleNo||1,cap,deload:!!PHASES[wk].deload,name:PHASES[wk].n,left:p.days-(n%p.days)};
+}
+/* 每個動作練到的部位（主要 1、次要 .5）；每週組數目標依目標設定（統合分析：每部位每週 10 組以上增肌效果較好） */
+const MUS = {
+  legpress:{腿前:1,臀:1}, legext:{腿前:1}, legcurl:{腿後:1}, abductor:{臀:1},
+  chestpress:{胸:1,手臂:.5}, pecdeck:{胸:1}, pulldown:{背:1,手臂:.5}, assist:{背:1,手臂:.5}, cablerow:{背:1,手臂:.5},
+  shoulderpress:{肩:1,手臂:.5}, lateral:{肩:1}, revfly:{肩:1,背:.5}, triceps:{手臂:1}, bicurl:{手臂:1}, crunch:{核心:1}
+};
+const MUS_ORDER=['胸','背','肩','腿前','腿後','臀','手臂','核心'];
+const VOL_TARGET={muscle:10,tone:8,fat:6,health:6};
+function weekVolume(days){
+  const v={}; MUS_ORDER.forEach(m=>v[m]=0);
+  days.forEach(d=>d.items.forEach(it=>{const m=MUS[it.ex]; if(m) for(const k in m) v[k]+=m[k]*it.sets;}));
+  return v;
+}
 /* 動作示範照片（起始→結束）：free-exercise-db，公眾領域 */
 const STEP = ['legpress','chestpress','pulldown','cablerow','shoulderpress','pecdeck','revfly','legcurl','legext','abductor','crunch','triceps','bicurl'];
 
@@ -456,9 +490,9 @@ function bmiCat(b){return b<18.5?['過輕','var(--warn)']:b<24?['正常','var(--
 function estMin(d){let s=0;d.items.forEach(it=>{s+=it.sets*(it.rest+35)});return Math.round(WARM+s/60+d.cardio.min);}
 
 function generate(p){
-  const g=GOALS[p.goal], why=[g.why], bmi=bmiOf(p);
-  let reps=g.reps, rest=g.rest, sets=p.exp==='new'?2:3;
-  if(p.exp==='new') why.push('還沒練過：每個動作先做 2 組，前兩週用輕重量把動作做順，再慢慢加到 3 組。');
+  const g=GOALS[p.goal], why=[g.why], bmi=bmiOf(p), ph=phaseOf(p);
+  let reps=g.reps, rest=g.rest, sets=Math.min(ph.cap,3);
+  why.push('每 5 週一輪：第 1–2 週打底、第 3–4 週每台多一組、第 5 週放鬆（組數少、重量輕一格）讓身體恢復，接著開始下一輪。'+(p.exp==='new'&&ph.cycle===1?'第一輪是新手輪：先 2 組，第 3 週起 3 組。':''));
   if(p.age>=50){rest+=15; if(reps==='8–12')reps='10–15'; why.push('50 歲以上：組間多休息 15 秒，次數多一點、重量輕一點，對關節比較友善。');}
   const knee=p.inj.includes('knee'), lowImpact=knee||bmi>=30;
   if(bmi>=30&&!knee) why.push('BMI 偏高：有氧選對膝蓋衝擊小的腳踏車和滑步機，先不用跑步機。');
@@ -467,6 +501,7 @@ function generate(p){
   let rot = lowImpact?['bike','elliptical']:(p.goal==='fat'?['treadmill','elliptical','bike']:['elliptical','bike','treadmill']);
   if(rot.some(x=>!isMissing(x))) rot=rot.filter(x=>!isMissing(x));
   if((S.missing||[]).length) why.push(`館裡沒有：${S.missing.map(x=>EX[x].n).join('、')}，已自動換成練同部位的其他器械。`);
+  const built=[];
   const days = SPLIT[p.days].map((k,di)=>{
     const ids=[], cues={};
     TPL[k].ex.forEach(id=>{
@@ -481,7 +516,7 @@ function generate(p){
       const lvl=p.exp==='new'?0:1;
       if(e.kind==='core') return {ex:id,sets:Math.min(3,sets),reps:CORE_REPS[id][lvl],rest:45,warn:c};
       if(e.kind==='bw') return {ex:id,sets,reps:BW_REPS[id][lvl],rest:Math.min(rest,60),warn:c};
-      let s=sets; if(p.goal==='muscle'&&p.exp==='pro'&&i<2) s=4;
+      let s=sets; if(p.goal==='muscle'&&p.exp==='pro'&&i<2) s=Math.min(4,ph.cap+1);
       return {ex:id,sets:s,reps,rest,warn:c};
     };
     const items=ids.map(mk);
@@ -496,19 +531,26 @@ function generate(p){
     while(estMin(d)+5<=p.mins && d.cardio.min<g.cmax) d.cardio.min+=5;
     if(p.mins>=90){
       const fits=()=>estMin(d)<=p.mins;
-      // 1) 依當天部位多排幾個動作（核心動作留在最後）
-      for(const id0 of EXTRA[k[0]==='U'?'U':k[0]==='L'?'L':'F']){
-        if(d.items.length>=9) break;
-        let r=id0;
-        p.inj.forEach(x=>{ if(r && Object.prototype.hasOwnProperty.call(INJ[x].rep,r)) r=INJ[x].rep[r]; });
-        if(r) r=availOf(p,r,d.items.map(it=>it.ex));
-        if(!r || d.items.some(it=>it.ex===r)) continue;
-        let at=d.items.findIndex(it=>EX[it.ex].kind==='core'||it.ex==='crunch'); if(at<0) at=d.items.length;
-        d.items.splice(at,0,mk(r,at));
+      // 1) 補練得不夠的部位：看整週（前面幾天＋今天）各部位組數，挑最缺的部位的器械加進來；都夠了就不加
+      const zone=k[0]==='U'?['胸','背','肩','手臂']:k[0]==='L'?['腿前','腿後','臀','核心']:MUS_ORDER;
+      const tgt=m=>(m==='手臂'||m==='核心')?Math.ceil(VOL_TARGET[p.goal]/2):VOL_TARGET[p.goal];
+      const proj=()=>weekVolume([...built,d].map(x=>({items:x.items.map(it=>({ex:it.ex,sets:EX[it.ex].kind==='m'?Math.max(it.sets,ph.cap):it.sets}))})));
+      const tried=new Set();
+      while(d.items.length<9){
+        const v=proj(); let best=null, bs=0;
+        for(const id of Object.keys(MUS)){
+          if(tried.has(id)||isMissing(id)||injBlocked(p,id)||d.items.some(it=>it.ex===id)) continue;
+          let sc=0; for(const m in MUS[id]) if(zone.includes(m)) sc+=MUS[id][m]*Math.max(0,tgt(m)-v[m]);
+          for(const m in MUS[id]) if(!zone.includes(m)&&MUS[id][m]>=1) sc=0;
+          if(sc>bs){bs=sc;best=id;}
+        }
+        if(!best) break; tried.add(best);
+        let at=d.items.findIndex(it=>it.ex==='crunch'); if(at<0) at=d.items.length;
+        d.items.splice(at,0,mk(best,at));
         if(!fits()) d.items.splice(at,1);
       }
       // 2) 器械動作多做一組
-      const maxSets=p.exp==='new'?3:4;
+      const maxSets=ph.cap;
       let grew=true;
       while(grew){ grew=false;
         for(const it of d.items){ if(EX[it.ex].kind!=='m'||it.sets>=maxSets) continue; it.sets++; if(fits()) grew=true; else it.sets--; }
@@ -516,6 +558,7 @@ function generate(p){
       // 3) 剩下的時間給有氧
       while(estMin(d)+5<=p.mins && d.cardio.min<LONG_CARDIO[p.goal]) d.cardio.min+=5;
     }
+    built.push(d);
     return d;
   });
   why.push(`每次可以運動 ${p.mins} 分鐘：動作數和有氧時間都調整到這個長度以內（含 ${WARM} 分鐘熱身）。`);
@@ -555,6 +598,10 @@ function suggest(p,id,reps){
 function curId(c,i){const s=c.swaps[i];return typeof s==='string'?s:(s?EX[c.items[i].ex].alt:c.items[i].ex);}
 function fillSug(p,c,i){
   const it=c.items[i], id=curId(c,i); if(!id) return; const sg=suggest(p,id,it.reps);
+  if(c.light&&EX[id].kind==='m'&&sg.w){ // 放鬆週／今天很累：輕一格
+    const st=stepOf(id); sg.w=String(Math.max(st,+sg.w+(id==='assist'?st:-st)));
+    sg.note=(c.deload?'放鬆週':'今天狀態差')+'：比平常輕一格';
+  }
   c.sug=c.sug||{}; c.sug[i]=sg;
   c.logs[i].forEach(s=>{ if(!s.done&&!s.w&&!s.r){s.w=sg.w;s.r=sg.r;} });
 }
@@ -674,6 +721,15 @@ function renderPlan(){
     <p class="label" style="margin:0">熱量是用公式粗估的。如果體重兩週都沒變化，再往下調 100–200 大卡。</p>
     <div class="why"><b style="font-size:14px">為什麼這樣排</b><ul>${why.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>
   </section>
+  ${(()=>{const ph=phaseOf(p), v=weekVolume(days), tg=VOL_TARGET[p.goal];
+    return `<section class="panel stack" style="margin-top:12px">
+    <div class="row" style="justify-content:space-between"><b>第 ${ph.cycle} 輪・第 ${ph.wk+1} 週／5</b><span class="chip ${ph.deload?'guess':'sure'}">${ph.name}${ph.deload?'・輕一格':''}</span></div>
+    <div class="cyc">${PHASES.map((x,k)=>`<i class="${k<ph.wk?'past':k===ph.wk?'now':''}${x.deload?' dl':''}"></i>`).join('')}</div>
+    <small class="label">這週還要練 ${ph.left} 次</small>
+    <b style="font-size:14px;margin-top:6px">每週各部位組數（目標 ${tg} 組以上）</b>
+    <div class="vol">${MUS_ORDER.map(m=>{const t=(m==='手臂'||m==='核心')?Math.ceil(tg/2):tg, x=Math.round(v[m]*10)/10;
+      return `<span>${m}</span><div class="bar"><i style="width:${Math.min(100,x/(t*1.6)*100)}%" class="${x>=t?'ok':''}"></i><em style="left:${100/1.6}%"></em></div><span class="num">${x}</span>`}).join('')}</div>
+  </section>`;})()}
   <h2 class="sec">${days.length} 天輪流練・${['','','週二、週六','週一、三、五','週一、二、四、五'][p.days]}</h2><div class="stack">`;
   days.forEach((d,i)=>{
     h+=`<article class="panel day${i===next?' next':''}">
@@ -856,7 +912,17 @@ document.addEventListener('click',ev=>{
   else if(a==='start'){
     const i=+b.dataset.day, d=generate(p).days[i];
     if(c&&!arm(b,'start'+i,'已有進行中的訓練，再按一次改練這天',b.textContent))return;
+    $('#sheetBody').innerHTML=`<h2 id="sheetT">今天狀態？</h2><div class="choice">
+      <button class="btn block primary" type="button" data-act="startGo" data-day="${i}" data-r="ok">還不錯</button>
+      <button class="btn block" type="button" data-act="startGo" data-day="${i}" data-r="tired">很累（沒睡好、還很酸）</button></div>`;
+    $('#sheet').hidden=false; document.body.style.overflow='hidden';
+  }
+  else if(a==='startGo'){
+    closeHow();
+    const i=+b.dataset.day, d=generate(p).days[i], ph=phaseOf(p), tired=b.dataset.r==='tired';
+    if(tired) d.items.forEach(it=>{ if(EX[it.ex].kind==='m') it.sets=Math.max(1,it.sets-1); });
     p.current={idx:i,t:d.t,start:Date.now(),items:d.items,cardio:d.cardio,swaps:{},swapCardio:false,cardioDone:false,
+      light:tired||ph.deload,deload:ph.deload,tired,
       logs:d.items.map(it=>Array.from({length:it.sets},()=>({w:'',r:'',done:false})))};
     p.current.items.forEach((_,k)=>fillSug(p,p.current,k));
     save();go('workout');
@@ -888,7 +954,9 @@ document.addEventListener('click',ev=>{
   else if(a==='finish'){
     const items=c.items.map((it,i)=>({ex:curId(c,i),sets:c.logs[i]})).filter(x=>x.ex);
     p.history.push({date:new Date().toISOString(),title:c.t,dur:Math.max(1,Math.round((Date.now()-c.start)/60000)),cardio:c.cardioDone,items});
-    p.next=c.idx+1; p.current=null; stopRest(); save(); go('history');
+    p.next=c.idx+1; p.current=null;
+    if(p.history.length-(p.cycleStart||0)>=5*p.days){p.cycleStart=p.history.length;p.cycleNo=(p.cycleNo||1)+1;} // 一輪 5 週練完，開新的一輪
+    stopRest(); save(); go('history');
   }
   else if(a==='abort'){
     if(!arm(b,'abort','確定放棄？再按一次','放棄這次訓練'))return;
@@ -916,7 +984,7 @@ function tickClock(){
 setInterval(tickClock,1000);
 render();
 /* 自動更新：主畫面 App 會留舊版快取；開啟／切回來時偷看線上版本，有新版就重新載入 */
-const APP_VER='2026-11-22d';
+const APP_VER='2026-11-24a';
 function checkUpdate(){
   fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
     const m=t.match(/const APP_VER='([^']+)'/);
