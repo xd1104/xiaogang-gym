@@ -619,8 +619,130 @@ function nutrition(p){
 const KEY='xg-gym-v2';
 let S={profiles:[],active:null};
 try{const raw=localStorage.getItem(KEY); if(raw) S=Object.assign(S,JSON.parse(raw));}catch(e){}
-function save(){try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}}
+/* 每個人的資料改過就蓋時間戳（p.u），「館裡沒有」改過就蓋 S.mu；同步時靠這個判斷哪邊比較新 */
+const hashOf=o=>JSON.stringify(o,(k,v)=>k==='u'?undefined:v);
+const lastHash={}; let lastMiss='';
+function snapHashes(){S.profiles.forEach(p=>lastHash[p.id]=hashOf(p)); lastMiss=JSON.stringify(S.missing||[]);}
+snapHashes();
+function stamp(){
+  const now=Date.now();
+  S.profiles.forEach(p=>{const h=hashOf(p); if(lastHash[p.id]!==h){p.u=now;lastHash[p.id]=h;}});
+  const m=JSON.stringify(S.missing||[]); if(m!==lastMiss){S.mu=now;lastMiss=m;}
+}
+function save(){stamp();try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} Sync.later();}
 const P=()=>S.profiles.find(x=>x.id===S.active)||null;
+
+/* ================= 雲端同步：私人 GitHub repo 的 data.json；兩支手機各自改，合併不覆蓋 ================= */
+const SYNC_REPO='xd1104/xiaogang-gym-data', SYNC_FILE='data.json', SKEY='xg-sync';
+const uniqBy=(a,k)=>{const m=new Map();a.forEach(x=>{if(x&&x[k]!=null&&!m.has(x[k]))m.set(x[k],x);});return [...m.values()];};
+function mergeData(L,R){
+  const deleted=[...new Set([...(L.deleted||[]),...(R.deleted||[])])], map=new Map();
+  for(const p of [...(R.profiles||[]),...(L.profiles||[])]){
+    if(deleted.includes(p.id)) continue;
+    const o=map.get(p.id); if(!o){map.set(p.id,p);continue;}
+    const [nw,od]=(p.u||0)>=(o.u||0)?[p,o]:[o,p];
+    const history=uniqBy([...(nw.history||[]),...(od.history||[])],'date').sort((a,b)=>a.date<b.date?-1:1);
+    const weights=uniqBy([...(nw.weights||[]),...(od.weights||[])],'d').sort((a,b)=>a.d<b.d?-1:1);
+    // 進度（下次練哪天、第幾輪、進行中的訓練）跟著紀錄比較多的那邊，避免舊手機把進度倒退
+    const pr=(od.history||[]).length>(nw.history||[]).length?od:nw;
+    map.set(p.id,Object.assign({},nw,{history,weights,next:pr.next,cycleStart:pr.cycleStart,cycleNo:pr.cycleNo,current:pr.current,u:Math.max(p.u||0,o.u||0)}));
+  }
+  const lm=(L.mu||0)>=(R.mu||0);
+  return {v:1,profiles:[...map.values()],deleted,missing:(lm?L.missing:R.missing)||[],mu:Math.max(L.mu||0,R.mu||0)};
+}
+const b64e=s=>btoa(unescape(encodeURIComponent(s))), b64d=s=>decodeURIComponent(escape(atob(s.replace(/\s/g,''))));
+const Sync={
+  cfg:(()=>{try{return JSON.parse(localStorage.getItem(SKEY)||'null');}catch(e){return null;}})(),
+  busy:false, again:false, t:0, msg:'',
+  setCfg(c){this.cfg=c;try{c?localStorage.setItem(SKEY,JSON.stringify(c)):localStorage.removeItem(SKEY);}catch(e){}},
+  later(){if(!this.cfg)return;clearTimeout(this.t);this.t=setTimeout(()=>this.run(),3000);},
+  async api(method,body){
+    const r=await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/${SYNC_FILE}`+(method==='GET'?'?t='+Date.now():''),{method,cache:'no-store',
+      headers:{Authorization:'Bearer '+this.cfg.tok,Accept:'application/vnd.github+json'},body:body?JSON.stringify(body):undefined});
+    return r;
+  },
+  async pull(){
+    const r=await this.api('GET');
+    if(r.status===404) return {data:{v:1,profiles:[],deleted:[],missing:[],mu:0},sha:null};
+    if(!r.ok) throw r.status;
+    const j=await r.json(); let txt=j.content?b64d(j.content):'';
+    if(!txt&&j.download_url){const rr=await fetch(`https://api.github.com/repos/${SYNC_REPO}/contents/${SYNC_FILE}`,{cache:'no-store',headers:{Authorization:'Bearer '+this.cfg.tok,Accept:'application/vnd.github.raw'}});txt=await rr.text();}
+    return {data:txt?JSON.parse(txt):{v:1,profiles:[]},sha:j.sha};
+  },
+  async run(rename){
+    if(!this.cfg) return;
+    if(this.busy){this.again=true;return;}
+    this.busy=true;
+    try{
+      for(let tryN=0;tryN<3;tryN++){
+        const {data:R,sha}=await this.pull();
+        if(rename){ // 第一次加入：同名但不同 id 的人視為同一個人（各自手機先建的），併成雲端那個 id
+          S.profiles.forEach(p=>{const q=(R.profiles||[]).find(x=>x.name===p.name&&x.id!==p.id&&!S.profiles.some(y=>y.id===x.id)); if(q){if(S.active===p.id)S.active=q.id; p.id=q.id;}});
+          rename=false;
+        }
+        const L={profiles:S.profiles,deleted:S.deleted||[],missing:S.missing||[],mu:S.mu||0};
+        const M=mergeData(L,R);
+        const out=JSON.stringify(M);
+        if(out!==JSON.stringify(Object.assign({v:1,profiles:[],deleted:[],missing:[],mu:0},R))){
+          const w=await this.api('PUT',{message:'sync',content:b64e(JSON.stringify(M,null,1)),...(sha?{sha}:{})});
+          if(w.status===409||w.status===422) continue; // 另一支手機剛好也在寫：重抓再合併
+          if(!w.ok) throw w.status;
+        }
+        this.apply(M); this.cfg.last=Date.now(); this.setCfg(this.cfg); this.msg=''; break;
+      }
+    }catch(e){ this.msg=e===401||e===403?'金鑰失效或沒有權限':(typeof e==='number'?'同步失敗（'+e+'）':'沒有網路，稍後自動再試'); }
+    this.busy=false;
+    if(this.again){this.again=false;this.later();}
+    if(tab==='me'&&!editing&&!(document.activeElement&&/^(INPUT|TEXTAREA)$/.test(document.activeElement.tagName))) keepScroll();
+  },
+  apply(M){
+    const before=JSON.stringify(S.profiles)+JSON.stringify(S.missing||[]);
+    S.profiles=M.profiles; S.deleted=M.deleted; S.missing=M.missing; S.mu=M.mu;
+    if(!P()) S.active=S.profiles.length?S.profiles[0].id:null;
+    snapHashes(); try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
+    const typing=document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
+    if(before!==JSON.stringify(S.profiles)+JSON.stringify(S.missing||[])&&!editing&&!typing&&$('#sheet').hidden) keepScroll();
+  }
+};
+/* 邀請連結：把金鑰用「邀請密碼」加密放在網址 # 後面（不會傳到任何伺服器），另一支手機輸入密碼解開 */
+const enc=new TextEncoder(), dec=new TextDecoder();
+const u8=b=>new Uint8Array(b), toB64u=b=>btoa(String.fromCharCode(...u8(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const fromB64u=s=>Uint8Array.from(atob(s.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0));
+async function deriveKey(pw,salt){const k=await crypto.subtle.importKey('raw',enc.encode(pw),'PBKDF2',false,['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2',salt,iterations:600000,hash:'SHA-256'},k,{name:'AES-GCM',length:256},false,['encrypt','decrypt']);}
+async function sealTok(tok,pw){const salt=crypto.getRandomValues(new Uint8Array(16)),iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:'AES-GCM',iv},await deriveKey(pw,salt),enc.encode(tok));
+  return toB64u(new Uint8Array([...salt,...iv,...u8(ct)]));}
+async function openTok(s,pw){const a=fromB64u(s);
+  const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:a.slice(16,28)},await deriveKey(pw,a.slice(0,16)),a.slice(28));
+  return dec.decode(pt);}
+function renderSync(){
+  const c=Sync.cfg;
+  if(!c) return `<h2 class="sec">雲端同步</h2><section class="panel stack">
+    <label class="field"><span>GitHub 金鑰</span><input class="txt" id="syncTok" type="password" autocomplete="off" placeholder="github_pat_…"></label>
+    <p class="err" id="syncErr" role="alert"></p>
+    <button class="btn primary block" type="button" data-act="syncOn">開始同步</button></section>`;
+  const t=c.last?new Date(c.last):null;
+  return `<h2 class="sec">雲端同步</h2><section class="panel stack">
+    <div class="row" style="justify-content:space-between"><b>${Sync.msg?`<span style="color:var(--bad)">${esc(Sync.msg)}</span>`:(t?`已同步・${t.getMonth()+1}/${t.getDate()} ${String(t.getHours()).padStart(2,'0')}:${String(t.getMinutes()).padStart(2,'0')}`:'同步中…')}</b>
+    <button class="btn swap" type="button" data-act="syncNow">立刻同步</button></div>
+    <button class="btn block" type="button" data-act="syncInvite">邀請另一支手機</button>
+    <button class="btn danger block" type="button" data-act="syncOff" id="syncOffBtn">這支手機停止同步</button></section>`;
+}
+function openInvite(){
+  $('#sheetBody').innerHTML=`<h2 id="sheetT">邀請另一支手機</h2>
+    <label class="field"><span>設一個邀請密碼（傳連結後口頭告訴對方）</span><input class="txt" id="invPw" type="text" autocomplete="off"></label>
+    <p class="err" id="invErr" role="alert"></p>
+    <button class="btn primary block" type="button" data-act="invMake">產生連結</button><div id="invOut"></div>`;
+  $('#sheet').hidden=false; document.body.style.overflow='hidden';
+}
+function openJoin(code){
+  $('#sheetBody').innerHTML=`<h2 id="sheetT">加入雲端同步</h2>
+    <label class="field"><span>邀請密碼</span><input class="txt" id="joinPw" type="text" autocomplete="off"></label>
+    <p class="err" id="joinErr" role="alert"></p>
+    <button class="btn primary block" type="button" data-act="joinGo" data-code="${esc(code)}">加入</button>`;
+  $('#sheet').hidden=false; document.body.style.overflow='hidden';
+}
 
 let tab='plan', editing=false;
 if(P()&&P().current) tab='workout';
@@ -840,6 +962,7 @@ function renderMe(){
     </section>
     <div style="height:12px"></div>
     <button class="btn block" type="button" data-act="addPerson">＋ 新增一個人（一起練的朋友、家人）</button>
+    ${renderSync()}
     <h2 class="sec">場館：高雄市小港運動中心</h2>
     <section class="panel info stack">
       <dl>
@@ -904,6 +1027,35 @@ document.addEventListener('click',ev=>{
   const a=b.dataset.act, p=P(), c=p&&p.current;
   if(a==='how'){openHow(b.dataset.ex);return;}
   if(a==='closeHow'){closeHow();return;}
+  if(a==='syncOn'){
+    const tok=($('#syncTok').value||'').trim(); if(!tok){$('#syncErr').textContent='請貼上金鑰';return;}
+    b.disabled=true; b.textContent='連線中…';
+    Sync.setCfg({tok}); Sync.run(true).then(()=>{ if(Sync.msg){$('#syncErr')&&($('#syncErr').textContent=Sync.msg); if(/金鑰/.test(Sync.msg))Sync.setCfg(null);} keepScroll(); });
+    return;
+  }
+  if(a==='syncNow'){Sync.run();return;}
+  if(a==='syncOff'){if(!arm(b,'syncoff','資料會留在這支手機，再按一次確認',b.textContent))return;Sync.setCfg(null);keepScroll();return;}
+  if(a==='syncInvite'){openInvite();return;}
+  if(a==='invMake'){
+    const pw=($('#invPw').value||'').trim(); if(pw.length<4){$('#invErr').textContent='密碼至少 4 個字';return;}
+    b.disabled=true; b.textContent='產生中…';
+    sealTok(Sync.cfg.tok,pw).then(code=>{
+      const url=location.origin+location.pathname+'#join='+code;
+      $('#invOut').innerHTML=`<div class="choice" style="margin-top:10px">${navigator.share?`<button class="btn primary block" type="button" data-act="invShare">分享連結</button>`:''}<button class="btn block" type="button" data-act="invCopy">複製連結</button></div>`;
+      $('#invOut').dataset.url=url; b.hidden=true;
+    });
+    return;
+  }
+  if(a==='invShare'){navigator.share({title:'小港重訓手帳',url:$('#invOut').dataset.url}).catch(()=>{});return;}
+  if(a==='invCopy'){navigator.clipboard.writeText($('#invOut').dataset.url).then(()=>{b.textContent='已複製';},()=>{prompt('複製這個連結',$('#invOut').dataset.url);});return;}
+  if(a==='joinGo'){
+    const pw=($('#joinPw').value||'').trim(); b.disabled=true; b.textContent='解開中…';
+    openTok(b.dataset.code,pw).then(tok=>{
+      history.replaceState(null,'',location.pathname+location.search);
+      Sync.setCfg({tok}); closeHow(); Sync.run(true).then(()=>go(P()?'plan':'me'));
+    },()=>{$('#joinErr').textContent='密碼不對';b.disabled=false;b.textContent='加入';});
+    return;
+  }
   if(a==='tab') go(b.dataset.t);
   else if(a==='switch'){S.active=b.dataset.id;save();tab=P().current?'workout':'plan';editing=false;stopRest();render();window.scrollTo(0,0);}
   else if(a==='addPerson'){editing='new';tab='me';render();window.scrollTo(0,0);}
@@ -964,6 +1116,7 @@ document.addEventListener('click',ev=>{
   }
   else if(a==='delPerson'){
     if(!arm(b,'del','紀錄會全部刪除，再按一次確認',b.textContent))return;
+    S.deleted=[...new Set([...(S.deleted||[]),p.id])];
     S.profiles=S.profiles.filter(x=>x.id!==p.id);S.active=S.profiles.length?S.profiles[0].id:null;save();go('plan');
   }
 });
@@ -983,8 +1136,11 @@ function tickClock(){
 }
 setInterval(tickClock,1000);
 render();
+{const m=location.hash.match(/^#join=([\w-]+)$/); if(m) openJoin(m[1]); else Sync.run();}
+document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') Sync.run(); });
+window.addEventListener('online',()=>Sync.run());
 /* 自動更新：主畫面 App 會留舊版快取；開啟／切回來時偷看線上版本，有新版就重新載入 */
-const APP_VER='2026-11-24a';
+const APP_VER='2026-11-24b';
 function checkUpdate(){
   fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
     const m=t.match(/const APP_VER='([^']+)'/);
