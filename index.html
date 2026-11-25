@@ -912,10 +912,10 @@ function renderPlan(){
     <div class="vol">${MUS_ORDER.map(m=>{const t=(m==='手臂'||m==='核心')?Math.ceil(tg/2):tg, x=Math.round(v[m]*10)/10;
       return `<span>${m}</span><div class="bar"><i style="width:${Math.min(100,x/(t*1.6)*100)}%" class="${x>=t?'ok':''}"></i><em style="left:${100/1.6}%"></em></div><span class="num">${x}</span>`}).join('')}</div>
   </section>`;})()}
-  <h2 class="sec">${days.length} 天輪流練</h2><div class="stack">`;
-  days.forEach((d,i)=>{
+  <h2 class="sec">下次練</h2><div class="stack">`;
+  [next].forEach(i=>{ const d=days[i]; tuneToday(p,d,[],false);
     h+=`<article class="panel day${i===next?' next':''}">
-      <div class="day-head"><div><h2>${esc(d.t)}${i===next?'<span class="tag-next">下次練這天</span>':''}</h2></div>
+      <div class="day-head"><div><h2>${esc(d.t)}</h2></div>
       <div class="mins"><b class="num">${estMin(d)}</b><small>分鐘</small></div></div>
       <ul class="exlist">${d.items.map(it=>{const e=EX[it.ex];return `<li><span>${HOW[it.ex]?`<button class="exname" type="button" data-act="how" data-ex="${it.ex}">${esc(e.n)}</button>`:esc(e.n)}${!e.sure?'<i class="dot" title="現場確認"></i>':''}${it.warn.length?' <span class="chip guess">注意</span>':''}</span><span class="sr num">${it.sets}×${esc(it.reps)}</span></li>`}).join('')}
       <li><span>${esc(EX[d.cardio.ex].n)}</span><span class="sr">${d.cardio.min} 分</span></li></ul>
@@ -994,14 +994,14 @@ function renderHistory(){
     <h2 class="sec">${esc(p.name)} 的訓練紀錄</h2>`;
   if(!H.length) return h+`<div class="panel empty">完成第一次訓練後，紀錄和每個動作用的重量都會出現在這裡。</div>`;
   h+=`<div class="hist">`;
-  H.forEach(x=>{
-    const dt=new Date(x.date); let n=0;
+  H.forEach((x,k)=>{
+    const dt=new Date(x.date), hi=p.history.length-1-k; let n=0;
     x.items.forEach(it=>it.sets.forEach(s=>{if(s.done)n++}));
     const tm=String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
     const add=x.items.filter(it=>it.add&&it.sets.some(s=>s.done)).map(it=>EX[it.ex]?EX[it.ex].n:'').filter(Boolean);
     const best=x.items.filter(it=>!it.add&&it.sets.some(s=>s.done&&s.w)).slice(0,3).map(it=>EX[it.ex].n+' '+Math.max(...it.sets.filter(s=>s.done&&s.w).map(s=>+s.w||0))+' lbs').join('・');
     h+=`<div class="panel hist-item"><div class="d"><b class="num">${dt.getDate()}</b><small>${dt.getMonth()+1} 月</small></div>
-      <div><h3>${esc(x.title)}</h3><p>${tm}・${n} 組・${x.dur} 分鐘${x.cardio?'・有氧完成':''}${x.feel?'・'+FEEL[x.feel]:''}</p>${best?`<p>${esc(best)}</p>`:''}${add.length?`<p>自己加：${esc(add.join('、'))}</p>`:''}</div></div>`;
+      <div><h3>${esc(x.title)}</h3><p>${tm}・${n} 組・${x.dur} 分鐘${x.cardio?'・有氧完成':''}${x.feel?'・'+FEEL[x.feel]:''}</p>${best?`<p>${esc(best)}</p>`:''}${add.length?`<p>自己加：${esc(add.join('、'))}</p>`:''}${!x.feel&&now-dt.getTime()<3*864e5?`<div class="chips" style="margin-top:8px">${Object.entries(FEEL).map(([f,t])=>`<button class="chipbtn" type="button" data-act="feelH" data-i="${hi}" data-f="${f}">${t}</button>`).join('')}</div>`:''}</div></div>`;
   });
   return h+`</div>`;
 }
@@ -1176,6 +1176,7 @@ document.addEventListener('click',ev=>{
     $('#sheet').hidden=false; document.body.style.overflow='hidden';
   }
   else if(a==='feel'){const h=p.history[p.history.length-1]; if(h)h.feel=b.dataset.f; closeHow(); save(); keepScroll();}
+  else if(a==='feelH'){const h=p.history[+b.dataset.i]; if(h)h.feel=b.dataset.f; save(); keepScroll();}
   else if(a==='soreT'){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true');}
   else if(a==='addEx'){
     const used=c.items.map((_,k)=>curId(c,k));
@@ -1257,7 +1258,7 @@ render();
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') Sync.run(); });
 window.addEventListener('online',()=>Sync.run());
 /* 自動更新：主畫面 App 會留舊版快取；開啟／切回來時偷看線上版本，有新版就重新載入 */
-const APP_VER='2026-11-25b';
+const APP_VER='2026-11-25c';
 function checkUpdate(){
   fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
     const m=t.match(/const APP_VER='([^']+)'/);
