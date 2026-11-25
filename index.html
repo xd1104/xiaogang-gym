@@ -837,25 +837,23 @@ function renderPlan(){
     <div class="row" style="justify-content:space-between"><h2 style="font-size:18px">${esc(p.name)} 的課表</h2><span class="label">${GOALS[p.goal].n}・一週 ${p.days} 天・每次 ${p.mins} 分</span></div>
     <div class="body-stats">
       <div class="bs"><b class="num">${b.toFixed(1)}</b><small>BMI</small><i style="color:${bcol}">${bc}</i></div>
-      <div class="bs"><b class="num">${nu.kcal}</b><small>每天熱量（大卡）</small><i style="color:var(--muted)">${p.goal==='fat'?'比消耗少 400':p.goal==='muscle'?'比消耗多 200':'維持'}</i></div>
-      <div class="bs"><b class="num">${nu.prot}</b><small>每天蛋白質（克）</small><i style="color:var(--muted)">約 ${p.goal==='fat'||p.goal==='muscle'?'1.6':'1.2'} g/kg</i></div>
+      <div class="bs"><b class="num">${nu.kcal}</b><small>熱量 大卡</small></div>
+      <div class="bs"><b class="num">${nu.prot}</b><small>蛋白質 克</small></div>
     </div>
-    <p class="label" style="margin:0">熱量是用公式粗估的。如果體重兩週都沒變化，再往下調 100–200 大卡。</p>
-    <div class="why"><b style="font-size:14px">為什麼這樣排</b><ul>${why.map(w=>`<li>${esc(w)}</li>`).join('')}</ul></div>
   </section>
   ${(()=>{const ph=phaseOf(p), v=weekVolume(days), tg=VOL_TARGET[p.goal];
     return `<section class="panel stack" style="margin-top:12px">
     <div class="row" style="justify-content:space-between"><b>第 ${ph.cycle} 輪・第 ${ph.wk+1} 週／5</b><span class="chip ${ph.deload?'guess':'sure'}">${ph.name}${ph.deload?'・輕一格':''}</span></div>
     <div class="cyc">${PHASES.map((x,k)=>`<i class="${k<ph.wk?'past':k===ph.wk?'now':''}${x.deload?' dl':''}"></i>`).join('')}</div>
     <small class="label">這週還要練 ${ph.left} 次</small>
-    <b style="font-size:14px;margin-top:6px">每週各部位組數（目標 ${tg} 組以上）</b>
+    <b style="font-size:14px;margin-top:6px">每週各部位組數</b>
     <div class="vol">${MUS_ORDER.map(m=>{const t=(m==='手臂'||m==='核心')?Math.ceil(tg/2):tg, x=Math.round(v[m]*10)/10;
       return `<span>${m}</span><div class="bar"><i style="width:${Math.min(100,x/(t*1.6)*100)}%" class="${x>=t?'ok':''}"></i><em style="left:${100/1.6}%"></em></div><span class="num">${x}</span>`}).join('')}</div>
   </section>`;})()}
   <h2 class="sec">${days.length} 天輪流練・${['','','週二、週六','週一、三、五','週一、二、四、五'][p.days]}</h2><div class="stack">`;
   days.forEach((d,i)=>{
     h+=`<article class="panel day${i===next?' next':''}">
-      <div class="day-head"><div><h2>${esc(d.t)}${i===next?'<span class="tag-next">下次練這天</span>':''}</h2><div class="meta">${esc(d.f)}</div></div>
+      <div class="day-head"><div><h2>${esc(d.t)}${i===next?'<span class="tag-next">下次練這天</span>':''}</h2></div>
       <div class="mins"><b class="num">${estMin(d)}</b><small>分鐘</small></div></div>
       <ul class="exlist">${d.items.map(it=>{const e=EX[it.ex];return `<li><span>${HOW[it.ex]?`<button class="exname" type="button" data-act="how" data-ex="${it.ex}">${esc(e.n)}</button>`:esc(e.n)}${!e.sure?'<i class="dot" title="現場確認"></i>':''}${it.warn.length?' <span class="chip guess">注意</span>':''}</span><span class="sr num">${it.sets}×${esc(it.reps)}</span></li>`}).join('')}
       <li><span>${esc(EX[d.cardio.ex].n)}</span><span class="sr">${d.cardio.min} 分</span></li></ul>
@@ -863,13 +861,10 @@ function renderPlan(){
     </article>`;
   });
   h+=`</div>
-  <div class="legend" style="margin-top:12px"><span><i class="dot" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--warn)"></i> 常見器械，到現場確認有沒有；沒有就在訓練畫面按「換動作」→「館裡沒有」，以後課表會自動換掉</span></div>
-  <h2 class="sec">基本原則</h2>
-  <section class="panel notes">
-    <div class="note"><b class="k">1</b><p><b>熱身：</b>先騎腳踏車或滑步機 5 分鐘，第一個器械先用很輕的重量做 1 組。</p></div>
-    <div class="note"><b class="k">2</b><p><b>重量怎麼選：</b>App 會幫你填好，照著做。做到最後一下時，感覺還能再做 2–3 下最剛好；太輕或太重就直接改數字。</p></div>
-    <div class="note"><b class="k">3</b><p><b>什麼時候加重：</b>App 自動排：每組都做到上限，下次加一格；有一組不到下限，下次減一格。</p></div>
-    <div class="note"><b class="k">4</b><p><b>會痛就停：</b>肌肉痠是正常的，但關節刺痛、麻就馬上停，換別的動作。</p></div>
+  <div class="legend" style="margin-top:12px"><span><i class="dot" style="width:8px;height:8px;border-radius:50%;display:inline-block;background:var(--warn)"></i> 到現場確認有沒有</span></div>
+  <section class="panel notes" style="margin-top:12px">
+    <div class="note"><b class="k">1</b><p>先熱身 5 分鐘</p></div>
+    <div class="note"><b class="k">2</b><p>關節刺痛、麻就停</p></div>
   </section>`;
   return h;
 }
@@ -1140,7 +1135,7 @@ render();
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') Sync.run(); });
 window.addEventListener('online',()=>Sync.run());
 /* 自動更新：主畫面 App 會留舊版快取；開啟／切回來時偷看線上版本，有新版就重新載入 */
-const APP_VER='2026-11-24b';
+const APP_VER='2026-11-25a';
 function checkUpdate(){
   fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
     const m=t.match(/const APP_VER='([^']+)'/);
