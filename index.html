@@ -95,6 +95,10 @@ header.top p{margin:2px 0 0;color:var(--muted);font-size:14px}
 
 .chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:700;padding:2px 8px;border-radius:999px;white-space:nowrap}
 .f2{background:var(--accent-soft);color:var(--accent)}
+.chip.stk{border:1px solid var(--line);background:var(--surface);color:var(--muted);cursor:pointer;font-family:inherit}
+.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}
+.chipbtn{min-height:44px;padding:0 16px;border:1px solid var(--line);border-radius:999px;background:var(--surface);color:var(--ink);font:inherit;font-weight:700;font-size:15px;cursor:pointer}
+.chipbtn[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fff}
 .fany{background:var(--bg);color:var(--muted);border:1px solid var(--line)}
 .sure{background:var(--ok-soft);color:var(--ok)}
 .guess{background:var(--warn-soft);color:var(--warn)}
@@ -481,6 +485,46 @@ function weekVolume(days){
   days.forEach(d=>d.items.forEach(it=>{const m=MUS[it.ex]; if(m) for(const k in m) v[k]+=m[k]*it.sets;}));
   return v;
 }
+/* ===== 從實際紀錄了解這個人：真的做了多少、隔多久、多累、待多久 ===== */
+const tgtOf=(p,m)=>(m==='手臂'||m==='核心')?Math.ceil(VOL_TARGET[p.goal]/2):VOL_TARGET[p.goal];
+function doneVolume(p,days){ // 最近 N 天真的打勾完成的組數（含換的、自己加的）
+  const v={}; MUS_ORDER.forEach(m=>v[m]=0); const t0=Date.now()-days*864e5;
+  p.history.forEach(h=>{ if(new Date(h.date).getTime()<t0) return;
+    h.items.forEach(it=>{const m=MUS[it.ex], n=it.sets.filter(s=>s.done).length; if(m) for(const k in m) v[k]+=m[k]*n;}); });
+  return v;
+}
+function recentMus(p,hours){ // 這幾小時內主要練過的部位
+  const t0=Date.now()-hours*36e5, out=new Set();
+  p.history.forEach(h=>{ if(new Date(h.date).getTime()<t0) return;
+    h.items.forEach(it=>{ if(!it.sets.some(s=>s.done)) return; const m=MUS[it.ex]; if(m) for(const k in m) if(m[k]>=1) out.add(k); }); });
+  return out;
+}
+const daysSince=p=>p.history.length?(Date.now()-new Date(p.history[p.history.length-1].date).getTime())/864e5:null;
+function effMins(p){ // 最近 3 次實際待多久：常超時就少排、常提早結束就多排
+  const r=p.history.slice(-3).filter(h=>h.dur>=10&&h.dur<=p.mins*2).map(h=>h.dur/p.mins);
+  if(r.length<3) return p.mins; const a=r.reduce((x,y)=>x+y,0)/3;
+  return a>1.15?Math.round(p.mins*.85):a<.75?Math.round(p.mins*1.15):p.mins;
+}
+/* 開始前的調整：痠、昨天練過、這週練夠了、上次很累、連兩次輕鬆、很久沒練 */
+function tuneToday(p,d,sore,tired){
+  const ph=phaseOf(p), feels=p.history.slice(-2).map(h=>h.feel), gap=daysSince(p);
+  const long=gap!=null&&gap>=8, hard=feels[1]==='hard', easy=!ph.deload&&!long&&feels.length===2&&feels.every(f=>f==='easy');
+  const recent=recentMus(p,40), vol=doneVolume(p,7);
+  d.items.forEach(it=>{
+    const m=MUS[it.ex]; if(!m||EX[it.ex].kind!=='m') return;
+    const main=Object.keys(m).filter(k=>m[k]>=1);
+    let dl=0, why='';
+    if(main.some(k=>sore.includes(k))){dl--;why='還痠：少一組';it.hold=true;}
+    else if(main.some(k=>recent.has(k))){dl--;why='剛練過：少一組';it.hold=true;}
+    else if(main.length&&main.every(k=>vol[k]>=tgtOf(p,k)*1.5)){dl--;why='這週練夠了：少一組';}
+    if(tired||(hard&&it.sets+dl>2)) dl--; else if(easy&&!it.hold&&!hard) dl++;
+    it.sets=Math.max(1,Math.min(4,it.sets+dl)); if(why) it.why=why;
+  });
+  const light=tired?'今天很累':ph.deload?'放鬆週':long?`隔 ${Math.floor(gap)} 天沒練`:'';
+  return {light, note:hard?'上次很累：少練一點':easy?'連兩次輕鬆：每台多一組':''};
+}
+const FEEL={easy:'輕鬆',ok:'剛好',hard:'很累'};
+const SORE=[['胸',['胸']],['背',['背']],['肩',['肩']],['腿',['腿前','腿後']],['臀',['臀']],['手臂',['手臂']],['核心',['核心']]];
 /* 動作示範照片（起始→結束）：free-exercise-db，公眾領域 */
 const STEP = ['legpress','chestpress','pulldown','cablerow','shoulderpress','pecdeck','revfly','legcurl','legext','abductor','crunch','triceps','bicurl'];
 
@@ -489,7 +533,7 @@ function bmiOf(p){return p.w/Math.pow(p.h/100,2);}
 function bmiCat(b){return b<18.5?['過輕','var(--warn)']:b<24?['正常','var(--ok)']:b<27?['過重','var(--warn)']:['肥胖','var(--bad)'];}
 function estMin(d){let s=0;d.items.forEach(it=>{s+=it.sets*(it.rest+35)});return Math.round(WARM+s/60+d.cardio.min);}
 
-function generate(p){
+function generate(p){ const MN=effMins(p);
   const g=GOALS[p.goal], why=[g.why], bmi=bmiOf(p), ph=phaseOf(p);
   let reps=g.reps, rest=g.rest, sets=Math.min(ph.cap,3);
   why.push('每 5 週一輪：第 1–2 週打底、第 3–4 週每台多一組、第 5 週放鬆（組數少、重量輕一格）讓身體恢復，接著開始下一輪。'+(p.exp==='new'&&ph.cycle===1?'第一輪是新手輪：先 2 組，第 3 週起 3 組。':''));
@@ -522,15 +566,15 @@ function generate(p){
     const items=ids.map(mk);
     const d={key:k,t:TPL[k].t,f:TPL[k].f,items,cardio:{ex:rot[di%rot.length],min:g.cardio}};
     // 依每次可運動時間調整
-    while(estMin(d)>p.mins && d.items.length>4){
+    while(estMin(d)>MN && d.items.length>4){
       let idx=-1; for(let i=d.items.length-1;i>=3;i--){ if(EX[d.items[i].ex].kind!=='core'){idx=i;break;} }
       if(idx<0) idx=d.items.length-1;
       d.items.splice(idx,1);
     }
-    while(estMin(d)>p.mins && d.cardio.min>10) d.cardio.min-=5;
-    while(estMin(d)+5<=p.mins && d.cardio.min<g.cmax) d.cardio.min+=5;
-    if(p.mins>=90){
-      const fits=()=>estMin(d)<=p.mins;
+    while(estMin(d)>MN && d.cardio.min>10) d.cardio.min-=5;
+    while(estMin(d)+5<=MN && d.cardio.min<g.cmax) d.cardio.min+=5;
+    if(MN>=90){
+      const fits=()=>estMin(d)<=MN;
       // 1) 補練得不夠的部位：看整週（前面幾天＋今天）各部位組數，挑最缺的部位的器械加進來；都夠了就不加
       const zone=k[0]==='U'?['胸','背','肩','手臂']:k[0]==='L'?['腿前','腿後','臀','核心']:MUS_ORDER;
       const tgt=m=>(m==='手臂'||m==='核心')?Math.ceil(VOL_TARGET[p.goal]/2):VOL_TARGET[p.goal];
@@ -539,7 +583,7 @@ function generate(p){
       while(d.items.length<9){
         const v=proj(); let best=null, bs=0;
         for(const id of Object.keys(MUS)){
-          if(tried.has(id)||isMissing(id)||injBlocked(p,id)||d.items.some(it=>it.ex===id)) continue;
+          if(EX[id].custom||tried.has(id)||isMissing(id)||injBlocked(p,id)||d.items.some(it=>it.ex===id)) continue;
           let sc=0; for(const m in MUS[id]) if(zone.includes(m)) sc+=MUS[id][m]*Math.max(0,tgt(m)-v[m]);
           for(const m in MUS[id]) if(!zone.includes(m)&&MUS[id][m]>=1) sc=0;
           if(sc>bs){bs=sc;best=id;}
@@ -556,21 +600,24 @@ function generate(p){
         for(const it of d.items){ if(EX[it.ex].kind!=='m'||it.sets>=maxSets) continue; it.sets++; if(fits()) grew=true; else it.sets--; }
       }
       // 3) 剩下的時間給有氧
-      while(estMin(d)+5<=p.mins && d.cardio.min<LONG_CARDIO[p.goal]) d.cardio.min+=5;
+      while(estMin(d)+5<=MN && d.cardio.min<LONG_CARDIO[p.goal]) d.cardio.min+=5;
     }
     built.push(d);
     return d;
   });
-  why.push(`每次可以運動 ${p.mins} 分鐘：動作數和有氧時間都調整到這個長度以內（含 ${WARM} 分鐘熱身）。`);
-  if(p.mins>=90) why.push(`時間比較長：多排幾個動作、每個器械多做一組、有氧拉長；剩下的時間留給排隊等器械、喝水和伸展。`);
+  why.push(`每次可以運動 ${MN} 分鐘：動作數和有氧時間都調整到這個長度以內（含 ${WARM} 分鐘熱身）。`);
+  if(MN>=90) why.push(`時間比較長：多排幾個動作、每個器械多做一組、有氧拉長；剩下的時間留給排隊等器械、喝水和伸展。`);
   return {days,why};
 }
 
 /* ================= 建議重量：第一次依體重保守估，之後依上次表現自動加減一格 ================= */
 const START = {legpress:.6,chestpress:.3,pulldown:.4,assist:.6,cablerow:.4,shoulderpress:.2,lateral:.1,pecdeck:.2,revfly:.1,legcurl:.25,legext:.25,abductor:.3,crunch:.2,triceps:.15,bicurl:.12};
-const BIG = ['legpress','chestpress','pulldown','assist','cablerow','abductor'];
-const stepOf=id=>BIG.includes(id)?5:2.5;
-const roundW=(id,w)=>{const s=stepOf(id);return Math.max(s,Math.round(w/s)*s);};
+/* 重量一律 lbs，只排機器上真的有的格子；每台的格子可以自己改（S.stacks，同一間館大家共用） */
+const KG2LB=2.2046;
+const DEF_STACK=[20,30,40,50,65,80,95,110,125,140,155,170,185,200,215,230];
+const stackOf=id=>((S.stacks||{})[id])||DEF_STACK;
+function snapLb(id,lb,down){const a=stackOf(id);let b=a[0];for(const x of a){if(down?x<=lb+.01:Math.abs(x-lb)<Math.abs(b-lb))b=x;}return b;}
+function stepLb(id,lb,n){const a=stackOf(id);let k=a.indexOf(snapLb(id,lb));k=Math.max(0,Math.min(a.length-1,k+n));return a[k];}
 function repRange(str){const m=String(str).match(/\d+/g);if(!m)return null;return [+m[0],+(m[1]||m[0])];}
 function lastLog(p,id){
   for(let i=p.history.length-1;i>=0;i--){
@@ -579,29 +626,31 @@ function lastLog(p,id){
   }
   return null;
 }
-function suggest(p,id,reps){
-  const e=EX[id], rr=repRange(reps);
-  if(e.kind!=='m') return {w:'',r:rr?String(rr[0]):'',note:''};
+function suggest(p,id,reps,hold){
+  const e=EX[id], rr=repRange(reps)||[10,12];
+  if(e.kind!=='m') return {w:'',r:String(rr[0]),note:''};
   const L=lastLog(p,id), ws=L?L.map(s=>parseFloat(s.w)).filter(x=>x>0):[];
+  if(e.custom) return {w:ws.length?String(ws[ws.length-1]):'',r:String(rr[1]),note:''};
   if(!ws.length){
+    if(!START[id]) return {w:'',r:String(rr[1]),note:''};
     const f=(p.sex==='f'?.6:1)*({new:1,some:1.25,pro:1.5}[p.exp]||1)*(p.age>=50?.85:1);
-    return {w:String(roundW(id,p.w*START[id]*f)),r:String(rr[1]),note:'',first:true};
+    return {w:String(snapLb(id,p.w*START[id]*f*KG2LB,true)),r:String(rr[1]),note:'',first:true};
   }
-  const base=ws[ws.length-1], rs=L.map(s=>parseInt(s.r)).filter(x=>x>0), inv=id==='assist'?-1:1, st=stepOf(id);
-  if(rs.length===L.length&&Math.min(...rs)>=rr[1])
-    return {w:String(Math.max(st,base+inv*st)),r:String(rr[0]),note:`上次每組都做到 ${rr[1]} 下，${inv>0?'加':'減'}一格`+(inv<0?'（輔助配重越輕越難）':'')};
+  const base=snapLb(id,ws[ws.length-1]), rs=L.map(s=>parseInt(s.r)).filter(x=>x>0), inv=id==='assist'?-1:1;
+  if(rs.length===L.length&&Math.min(...rs)>=rr[1]&&!hold)
+    return {w:String(stepLb(id,base,inv)),r:String(rr[0]),note:`上次每組都做到 ${rr[1]} 下：${inv>0?'加':'減'}一格`};
   if(rs.length&&Math.min(...rs)<rr[0])
-    return {w:String(Math.max(st,base-inv*st)),r:String(rr[1]),note:`上次有一組不到 ${rr[0]} 下，${inv>0?'減':'加'}一格`};
-  return {w:String(base),r:String(rr[1]),note:`跟上次一樣重，這次每組拚到 ${rr[1]} 下`};
+    return {w:String(stepLb(id,base,-inv)),r:String(rr[1]),note:`上次有一組不到 ${rr[0]} 下：${inv>0?'減':'加'}一格`};
+  return {w:String(base),r:String(rr[1]),note:''};
 }
 /* 訓練中第 i 個動作現在做哪台：swaps[i] 是器械 id（新版）或 true（舊版＝EX.alt） */
 function curId(c,i){const s=c.swaps[i];return typeof s==='string'?s:(s?EX[c.items[i].ex].alt:c.items[i].ex);}
 function fillSug(p,c,i){
-  const it=c.items[i], id=curId(c,i); if(!id) return; const sg=suggest(p,id,it.reps);
-  if(c.light&&EX[id].kind==='m'&&sg.w){ // 放鬆週／今天很累：輕一格
-    const st=stepOf(id); sg.w=String(Math.max(st,+sg.w+(id==='assist'?st:-st)));
-    sg.note=(c.deload?'放鬆週':'今天狀態差')+'：比平常輕一格';
+  const it=c.items[i], id=curId(c,i); if(!id) return; const sg=suggest(p,id,it.reps,it.hold);
+  if(c.light&&EX[id].kind==='m'&&sg.w){ // 放鬆週／很累／很久沒練：輕一格
+    sg.w=String(stepLb(id,+sg.w,id==='assist'?1:-1)); sg.note=(typeof c.light==='string'?c.light:(c.deload?'放鬆週':'今天很累'))+'：輕一格';
   }
+  if(it.why) sg.note=[it.why,sg.note].filter(Boolean).join('・');
   c.sug=c.sug||{}; c.sug[i]=sg;
   c.logs[i].forEach(s=>{ if(!s.done&&!s.w&&!s.r){s.w=sg.w;s.r=sg.r;} });
 }
@@ -619,15 +668,27 @@ function nutrition(p){
 const KEY='xg-gym-v2';
 let S={profiles:[],active:null};
 try{const raw=localStorage.getItem(KEY); if(raw) S=Object.assign(S,JSON.parse(raw));}catch(e){}
-/* 每個人的資料改過就蓋時間戳（p.u），「館裡沒有」改過就蓋 S.mu；同步時靠這個判斷哪邊比較新 */
+/* 舊紀錄是公斤：每筆紀錄各自標 lb，沒標的換成 lbs 並對到最近的格子（同步合併時也會再跑一次） */
+function migrateLb(profiles){
+  const cv=(id,sets)=>sets.forEach(s=>{const w=parseFloat(s.w); if(w>0&&EX[id]&&EX[id].kind==='m'&&!EX[id].custom) s.w=String(snapLb(id,w*KG2LB));});
+  (profiles||[]).forEach(p=>{
+    (p.history||[]).forEach(h=>{ if(h.lb) return; h.items.forEach(it=>cv(it.ex,it.sets)); h.lb=1; });
+    const c=p.current; if(c&&!c.lb){ c.items.forEach((it,i)=>cv(curId(c,i)||it.ex,c.logs[i])); c.sug=null; c.lb=1; }
+  });
+}
+/* 自己加的動作（新機器名字）：大家共用，載入時補進 EX／MUS */
+function loadCustom(){(S.custom||[]).forEach(x=>{EX[x.id]={n:x.n,f:'2F',sure:true,kind:'m',cue:'',alt:'',custom:true}; MUS[x.id]={[x.m]:1};});}
+loadCustom(); migrateLb(S.profiles);
+/* 每個人的資料改過就蓋時間戳（p.u），「館裡沒有」改過就蓋 S.mu、重量格改過蓋 S.su；同步時靠這個判斷哪邊比較新 */
 const hashOf=o=>JSON.stringify(o,(k,v)=>k==='u'?undefined:v);
-const lastHash={}; let lastMiss='';
-function snapHashes(){S.profiles.forEach(p=>lastHash[p.id]=hashOf(p)); lastMiss=JSON.stringify(S.missing||[]);}
+const lastHash={}; let lastMiss='', lastStk='';
+function snapHashes(){S.profiles.forEach(p=>lastHash[p.id]=hashOf(p)); lastMiss=JSON.stringify(S.missing||[]); lastStk=JSON.stringify(S.stacks||{});}
 snapHashes();
 function stamp(){
   const now=Date.now();
   S.profiles.forEach(p=>{const h=hashOf(p); if(lastHash[p.id]!==h){p.u=now;lastHash[p.id]=h;}});
   const m=JSON.stringify(S.missing||[]); if(m!==lastMiss){S.mu=now;lastMiss=m;}
+  const k=JSON.stringify(S.stacks||{}); if(k!==lastStk){S.su=now;lastStk=k;}
 }
 function save(){stamp();try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){} Sync.later();}
 const P=()=>S.profiles.find(x=>x.id===S.active)||null;
@@ -647,8 +708,9 @@ function mergeData(L,R){
     const pr=(od.history||[]).length>(nw.history||[]).length?od:nw;
     map.set(p.id,Object.assign({},nw,{history,weights,next:pr.next,cycleStart:pr.cycleStart,cycleNo:pr.cycleNo,current:pr.current,u:Math.max(p.u||0,o.u||0)}));
   }
-  const lm=(L.mu||0)>=(R.mu||0);
-  return {v:1,profiles:[...map.values()],deleted,missing:(lm?L.missing:R.missing)||[],mu:Math.max(L.mu||0,R.mu||0)};
+  const lm=(L.mu||0)>=(R.mu||0), ls=(L.su||0)>=(R.su||0);
+  return {v:1,profiles:[...map.values()],deleted,missing:(lm?L.missing:R.missing)||[],mu:Math.max(L.mu||0,R.mu||0),
+    stacks:(ls?L.stacks:R.stacks)||{},su:Math.max(L.su||0,R.su||0),custom:uniqBy([...(L.custom||[]),...(R.custom||[])],'id')};
 }
 const b64e=s=>btoa(unescape(encodeURIComponent(s))), b64d=s=>decodeURIComponent(escape(atob(s.replace(/\s/g,''))));
 const Sync={
@@ -680,10 +742,10 @@ const Sync={
           S.profiles.forEach(p=>{const q=(R.profiles||[]).find(x=>x.name===p.name&&x.id!==p.id&&!S.profiles.some(y=>y.id===x.id)); if(q){if(S.active===p.id)S.active=q.id; p.id=q.id;}});
           rename=false;
         }
-        const L={profiles:S.profiles,deleted:S.deleted||[],missing:S.missing||[],mu:S.mu||0};
-        const M=mergeData(L,R);
+        const L={profiles:S.profiles,deleted:S.deleted||[],missing:S.missing||[],mu:S.mu||0,stacks:S.stacks||{},su:S.su||0,custom:S.custom||[]};
+        const M=mergeData(L,R); migrateLb(M.profiles);
         const out=JSON.stringify(M);
-        if(out!==JSON.stringify(Object.assign({v:1,profiles:[],deleted:[],missing:[],mu:0},R))){
+        if(out!==JSON.stringify(Object.assign({v:1,profiles:[],deleted:[],missing:[],mu:0,stacks:{},su:0,custom:[]},R))){
           const w=await this.api('PUT',{message:'sync',content:b64e(JSON.stringify(M,null,1)),...(sha?{sha}:{})});
           if(w.status===409||w.status===422) continue; // 另一支手機剛好也在寫：重抓再合併
           if(!w.ok) throw w.status;
@@ -697,7 +759,7 @@ const Sync={
   },
   apply(M){
     const before=JSON.stringify(S.profiles)+JSON.stringify(S.missing||[]);
-    S.profiles=M.profiles; S.deleted=M.deleted; S.missing=M.missing; S.mu=M.mu;
+    S.profiles=M.profiles; S.deleted=M.deleted; S.missing=M.missing; S.mu=M.mu; S.stacks=M.stacks; S.su=M.su; S.custom=M.custom; loadCustom();
     if(!P()) S.active=S.profiles.length?S.profiles[0].id:null;
     snapHashes(); try{localStorage.setItem(KEY,JSON.stringify(S));}catch(e){}
     const typing=document.activeElement&&/^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName);
@@ -782,7 +844,7 @@ const sureChip=e=>e.sure?'<span class="chip sure">館內確認有</span>':(e.kin
 function lastFor(p,id){
   for(let i=p.history.length-1;i>=0;i--){
     const it=p.history[i].items.find(x=>x.ex===id);
-    if(it){const done=it.sets.filter(s=>s.done&&(s.w||s.r));if(done.length){const b=done[done.length-1];return (b.w?b.w+' kg':'')+(b.w&&b.r?' × ':'')+(b.r?b.r+(EX[id].kind==='core'?'':' 下'):'');}}
+    if(it){const done=it.sets.filter(s=>s.done&&(s.w||s.r));if(done.length){const b=done[done.length-1];return (b.w?b.w+' lbs':'')+(b.w&&b.r?' × ':'')+(b.r?b.r+(EX[id].kind==='core'?'':' 下'):'');}}
   }
   return '';
 }
@@ -841,16 +903,16 @@ function renderPlan(){
       <div class="bs"><b class="num">${nu.prot}</b><small>蛋白質 克</small></div>
     </div>
   </section>
-  ${(()=>{const ph=phaseOf(p), v=weekVolume(days), tg=VOL_TARGET[p.goal];
+  ${(()=>{const ph=phaseOf(p), v=doneVolume(p,7), tg=VOL_TARGET[p.goal];
     return `<section class="panel stack" style="margin-top:12px">
     <div class="row" style="justify-content:space-between"><b>第 ${ph.cycle} 輪・第 ${ph.wk+1} 週／5</b><span class="chip ${ph.deload?'guess':'sure'}">${ph.name}${ph.deload?'・輕一格':''}</span></div>
     <div class="cyc">${PHASES.map((x,k)=>`<i class="${k<ph.wk?'past':k===ph.wk?'now':''}${x.deload?' dl':''}"></i>`).join('')}</div>
     <small class="label">這週還要練 ${ph.left} 次</small>
-    <b style="font-size:14px;margin-top:6px">每週各部位組數</b>
+    <b style="font-size:14px;margin-top:6px">最近 7 天各部位組數</b>
     <div class="vol">${MUS_ORDER.map(m=>{const t=(m==='手臂'||m==='核心')?Math.ceil(tg/2):tg, x=Math.round(v[m]*10)/10;
       return `<span>${m}</span><div class="bar"><i style="width:${Math.min(100,x/(t*1.6)*100)}%" class="${x>=t?'ok':''}"></i><em style="left:${100/1.6}%"></em></div><span class="num">${x}</span>`}).join('')}</div>
   </section>`;})()}
-  <h2 class="sec">${days.length} 天輪流練・${['','','週二、週六','週一、三、五','週一、二、四、五'][p.days]}</h2><div class="stack">`;
+  <h2 class="sec">${days.length} 天輪流練</h2><div class="stack">`;
   days.forEach((d,i)=>{
     h+=`<article class="panel day${i===next?' next':''}">
       <div class="day-head"><div><h2>${esc(d.t)}${i===next?'<span class="tag-next">下次練這天</span>':''}</h2></div>
@@ -882,7 +944,7 @@ function renderWorkout(){
   let h=`<div class="wk-head"><div><h2>${esc(p.name)}・${esc(c.t)}</h2><div class="label">已完成 <span class="num">${done}/${total}</span></div></div>
     <div class="clock" id="clock"><b class="num" id="elapsed">0:00</b><small>目標 ${p.mins} 分鐘內</small></div></div>
     <div class="prog" style="margin:10px 0 14px"><i style="width:${Math.round(done/total*100)}%"></i></div><div class="stack">
-    ${anyFirst?`<p class="cue sug">重量和次數已經幫你填好，照著做、做完按 ✓。第一次的重量是用體重估的：第一組太輕（還能多做 5 下以上）或太重，就直接改數字，下次會照你改的排。</p>`:''}`;
+    ${c.note?`<p class="cue sug">${esc(c.note)}</p>`:''}${anyFirst?`<p class="cue sug">第一次的重量是估的，太輕或太重直接改</p>`:''}`;
   c.items.forEach((it,i)=>{
     const id=curId(c,i);
     if(id===''){h+=`<article class="panel ex gone"><div class="ex-top"><h3>${esc(EX[it.ex].n)}</h3><button class="btn swap" type="button" data-act="unmissNow" data-i="${i}">其實有</button></div>
@@ -890,22 +952,24 @@ function renderWorkout(){
     const e=EX[id], L=c.logs[i], last=lastFor(p,id);
     const bw=e.kind!=='m';
     h+=`<article class="panel ex${L.every(s=>s.done)?' done':''}">
-      <div class="ex-top"><div class="stack" style="gap:4px"><div class="row">${floorChip(e.f)}${sureChip(e)}</div><h3>${esc(e.n)}</h3>${id!==it.ex?`<small class="label">原本：${esc(EX[it.ex].n)}</small>`:''}</div>
-      <button class="btn swap" type="button" data-act="swap" data-i="${i}">換動作</button></div>
-      <div class="presc"><b class="num">${it.sets} × ${esc(it.reps)}</b>・休息 ${fmt(it.rest)}</div>
+      <div class="ex-top"><div class="stack" style="gap:4px"><div class="row">${e.custom?'':floorChip(e.f)+sureChip(e)}${e.kind==='m'&&!e.custom?`<button class="chip stk" type="button" data-act="stack" data-ex="${id}">重量格</button>`:''}</div><h3>${esc(e.n)}</h3>${id!==it.ex?`<small class="label">原本：${esc(EX[it.ex].n)}</small>`:''}</div>
+      ${it.add?(L.some(s=>s.done)?'':`<button class="btn swap" type="button" data-act="rmAdd" data-i="${i}">移除</button>`):`<button class="btn swap" type="button" data-act="swap" data-i="${i}">換動作</button>`}</div>
+      ${it.add?'':`<div class="presc"><b class="num">${it.sets} × ${esc(it.reps)}</b>・休息 ${fmt(it.rest)}</div>`}
       ${howBtn(id)}
       <p class="cue">${esc(e.cue)}</p>
       ${id!==it.ex?'':it.warn.map(w=>`<p class="cue warn">${esc(w)}</p>`).join('')}
       ${last?`<div class="last">上次：${esc(last)}</div>`:''}
       ${c.sug&&c.sug[i]&&c.sug[i].note?`<p class="cue sug">${esc(c.sug[i].note)}</p>`:''}
-      <div class="sets"><div class="set hd"><span></span><small>${bw?'':'公斤'}</small><small>${e.kind==='core'?'秒／下':'次數'}</small><span></span></div>${L.map((s,j)=>`<div class="set"><span class="n">${j+1}</span>
-        <input id="w-${i}-${j}" inputmode="decimal" placeholder="${bw?'徒手':'公斤'}" value="${esc(s.w)}" data-i="${i}" data-j="${j}" data-k="w" aria-label="第 ${j+1} 組重量">
+      <div class="sets"><div class="set hd"><span></span><small>${bw?'':'lbs'}</small><small>${e.kind==='core'?'秒／下':'次數'}</small><span></span></div>${L.map((s,j)=>`<div class="set"><span class="n">${j+1}</span>
+        <input id="w-${i}-${j}" inputmode="decimal" placeholder="${bw?'徒手':'lbs'}" value="${esc(s.w)}" data-i="${i}" data-j="${j}" data-k="w" aria-label="第 ${j+1} 組重量">
         <input id="r-${i}-${j}" inputmode="numeric" placeholder="${e.kind==='core'?'秒/下':'次數'}" value="${esc(s.r)}" data-i="${i}" data-j="${j}" data-k="r" aria-label="第 ${j+1} 組次數">
         <button class="tick" type="button" data-act="tick" data-i="${i}" data-j="${j}" aria-pressed="${!!s.done}" aria-label="完成第 ${j+1} 組">✓</button></div>`).join('')}</div>
+      ${it.add?`<button class="btn block" type="button" data-act="addSet" data-i="${i}">＋ 一組</button>`:''}
     </article>`;
   });
   const cid=c.swapCardio?EX[c.cardio.ex].alt:c.cardio.ex, ce=EX[cid];
-  h+=`<article class="panel ex${c.cardioDone?' done':''}">
+  h+=`<button class="btn block" type="button" data-act="addEx">＋ 自己加動作</button>
+    <article class="panel ex${c.cardioDone?' done':''}">
       <div class="ex-top"><div class="stack" style="gap:4px"><div class="row">${floorChip('2F')}<span class="chip sure">收操有氧</span></div><h3>${esc(ce.n)}</h3></div>
       <button class="btn swap" type="button" data-act="swapCardio">${c.swapCardio?'換回':'換動作'}</button></div>
       <div class="presc"><b class="num">${c.cardio.min} 分鐘</b></div>
@@ -927,16 +991,17 @@ function renderHistory(){
     <div class="stat"><b class="num">${p.history.length}</b><small>總訓練次數</small></div>
     <div class="stat"><b class="num">${wk}</b><small>最近 7 天</small></div>
     <div class="stat"><b class="num">${(p.w-first>0?'+':'')+(p.w-first).toFixed(1)}</b><small>體重變化（kg）</small></div></div>
-    <p class="label" style="margin:8px 0 0">體重變化：在「我的資料」更新體重時會自動記錄。</p>
     <h2 class="sec">${esc(p.name)} 的訓練紀錄</h2>`;
   if(!H.length) return h+`<div class="panel empty">完成第一次訓練後，紀錄和每個動作用的重量都會出現在這裡。</div>`;
   h+=`<div class="hist">`;
   H.forEach(x=>{
     const dt=new Date(x.date); let n=0;
     x.items.forEach(it=>it.sets.forEach(s=>{if(s.done)n++}));
-    const best=x.items.filter(it=>it.sets.some(s=>s.done&&s.w)).slice(0,3).map(it=>EX[it.ex].n+' '+Math.max(...it.sets.filter(s=>s.done&&s.w).map(s=>+s.w||0))+'kg').join('・');
+    const tm=String(dt.getHours()).padStart(2,'0')+':'+String(dt.getMinutes()).padStart(2,'0');
+    const add=x.items.filter(it=>it.add&&it.sets.some(s=>s.done)).map(it=>EX[it.ex]?EX[it.ex].n:'').filter(Boolean);
+    const best=x.items.filter(it=>!it.add&&it.sets.some(s=>s.done&&s.w)).slice(0,3).map(it=>EX[it.ex].n+' '+Math.max(...it.sets.filter(s=>s.done&&s.w).map(s=>+s.w||0))+' lbs').join('・');
     h+=`<div class="panel hist-item"><div class="d"><b class="num">${dt.getDate()}</b><small>${dt.getMonth()+1} 月</small></div>
-      <div><h3>${esc(x.title)}</h3><p>${n} 組・${x.dur} 分鐘${x.cardio?'・有氧完成':''}</p>${best?`<p>${esc(best)}</p>`:''}</div></div>`;
+      <div><h3>${esc(x.title)}</h3><p>${tm}・${n} 組・${x.dur} 分鐘${x.cardio?'・有氧完成':''}${x.feel?'・'+FEEL[x.feel]:''}</p>${best?`<p>${esc(best)}</p>`:''}${add.length?`<p>自己加：${esc(add.join('、'))}</p>`:''}</div></div>`;
   });
   return h+`</div>`;
 }
@@ -1059,17 +1124,20 @@ document.addEventListener('click',ev=>{
   else if(a==='start'){
     const i=+b.dataset.day, d=generate(p).days[i];
     if(c&&!arm(b,'start'+i,'已有進行中的訓練，再按一次改練這天',b.textContent))return;
-    $('#sheetBody').innerHTML=`<h2 id="sheetT">今天狀態？</h2><div class="choice">
-      <button class="btn block primary" type="button" data-act="startGo" data-day="${i}" data-r="ok">還不錯</button>
-      <button class="btn block" type="button" data-act="startGo" data-day="${i}" data-r="tired">很累（沒睡好、還很酸）</button></div>`;
+    $('#sheetBody').innerHTML=`<h2 id="sheetT">哪裡還痠？</h2><div class="chips">
+      ${SORE.map(([n],k)=>`<button class="chipbtn" type="button" data-act="soreT" data-k="${k}" aria-pressed="false">${n}</button>`).join('')}
+      <button class="chipbtn" type="button" data-act="soreT" data-k="all" aria-pressed="false">全身很累</button></div>
+      <button class="btn block primary" type="button" data-act="startGo" data-day="${i}" style="margin-top:16px">開始</button>`;
     $('#sheet').hidden=false; document.body.style.overflow='hidden';
   }
   else if(a==='startGo'){
+    const on=[...document.querySelectorAll('[data-act="soreT"][aria-pressed="true"]')].map(x=>x.dataset.k);
     closeHow();
-    const i=+b.dataset.day, d=generate(p).days[i], ph=phaseOf(p), tired=b.dataset.r==='tired';
-    if(tired) d.items.forEach(it=>{ if(EX[it.ex].kind==='m') it.sets=Math.max(1,it.sets-1); });
-    p.current={idx:i,t:d.t,start:Date.now(),items:d.items,cardio:d.cardio,swaps:{},swapCardio:false,cardioDone:false,
-      light:tired||ph.deload,deload:ph.deload,tired,
+    const i=+b.dataset.day, d=generate(p).days[i], ph=phaseOf(p), tired=on.includes('all');
+    const sore=on.filter(k=>k!=='all').flatMap(k=>SORE[+k][1]);
+    const tn=tuneToday(p,d,sore,tired);
+    p.current={idx:i,t:d.t,start:Date.now(),items:d.items,cardio:d.cardio,swaps:{},swapCardio:false,cardioDone:false,lb:1,
+      light:tn.light,deload:ph.deload,tired,sore,note:tn.note,
       logs:d.items.map(it=>Array.from({length:it.sets},()=>({w:'',r:'',done:false})))};
     p.current.items.forEach((_,k)=>fillSug(p,p.current,k));
     save();go('workout');
@@ -1099,12 +1167,66 @@ document.addEventListener('click',ev=>{
   }
   else if(a==='cardio'){c.cardioDone=!c.cardioDone;save();keepScroll();}
   else if(a==='finish'){
-    const items=c.items.map((it,i)=>({ex:curId(c,i),sets:c.logs[i]})).filter(x=>x.ex);
-    p.history.push({date:new Date().toISOString(),title:c.t,dur:Math.max(1,Math.round((Date.now()-c.start)/60000)),cardio:c.cardioDone,items});
+    const items=c.items.map((it,i)=>Object.assign({ex:curId(c,i),sets:c.logs[i]},it.add?{add:1}:{})).filter(x=>x.ex);
+    p.history.push({date:new Date().toISOString(),title:c.t,dur:Math.max(1,Math.round((Date.now()-c.start)/60000)),cardio:c.cardioDone,items,lb:1});
     p.next=c.idx+1; p.current=null;
     if(p.history.length-(p.cycleStart||0)>=5*p.days){p.cycleStart=p.history.length;p.cycleNo=(p.cycleNo||1)+1;} // 一輪 5 週練完，開新的一輪
     stopRest(); save(); go('history');
+    $('#sheetBody').innerHTML=`<h2 id="sheetT">今天感覺？</h2><div class="choice">${Object.entries(FEEL).map(([k,n])=>`<button class="btn block" type="button" data-act="feel" data-f="${k}">${n}</button>`).join('')}</div>`;
+    $('#sheet').hidden=false; document.body.style.overflow='hidden';
   }
+  else if(a==='feel'){const h=p.history[p.history.length-1]; if(h)h.feel=b.dataset.f; closeHow(); save(); keepScroll();}
+  else if(a==='soreT'){b.setAttribute('aria-pressed',b.getAttribute('aria-pressed')==='true'?'false':'true');}
+  else if(a==='addEx'){
+    const used=c.items.map((_,k)=>curId(c,k));
+    const ids=Object.keys(MUS).filter(x=>EX[x].kind==='m'&&!isMissing(x)&&!used.includes(x));
+    $('#sheetBody').innerHTML=`<h2 id="sheetT">自己加動作</h2><div class="choice">${ids.map(x=>`<button class="btn block" type="button" data-act="addGo" data-ex="${x}">${esc(EX[x].n)}</button>`).join('')}</div>
+      <h4>其他</h4><label class="field"><span>名字</span><input class="txt" id="cxN" maxlength="16" autocomplete="off"></label>
+      <div class="chips">${MUS_ORDER.map(m=>`<button class="chipbtn" type="button" data-act="cxM" data-m="${m}" aria-pressed="false">${m}</button>`).join('')}</div>
+      <p class="err" id="cxErr" role="alert"></p><button class="btn primary block" type="button" data-act="addNew">加入</button>`;
+    $('#sheet').hidden=false; $('.sheet-card').scrollTop=0; document.body.style.overflow='hidden';
+  }
+  else if(a==='cxM'){document.querySelectorAll('[data-act="cxM"]').forEach(x=>x.setAttribute('aria-pressed',x===b?'true':'false'));}
+  else if(a==='addGo'||a==='addNew'){
+    let id=b.dataset.ex;
+    if(a==='addNew'){
+      const n=($('#cxN').value||'').trim(), mb=document.querySelector('[data-act="cxM"][aria-pressed="true"]');
+      if(!n||!mb){$('#cxErr').textContent=!n?'請填名字':'請選練哪裡';return;}
+      const old=(S.custom||[]).find(x=>x.n===n);
+      if(old) id=old.id; else {id='x'+Date.now().toString(36); S.custom=[...(S.custom||[]),{id,n,m:mb.dataset.m}]; loadCustom();}
+    }
+    const g=GOALS[p.goal];
+    c.items.push({ex:id,sets:3,reps:g.reps,rest:g.rest,warn:[],add:1});
+    c.logs.push(Array.from({length:3},()=>({w:'',r:'',done:false})));
+    fillSug(p,c,c.items.length-1); closeHow(); save(); keepScroll();
+  }
+  else if(a==='addSet'){const L=c.logs[+b.dataset.i], l=L[L.length-1]; L.push({w:l?l.w:'',r:l?l.r:'',done:false}); save(); keepScroll();}
+  else if(a==='rmAdd'){
+    const i=+b.dataset.i; c.items.splice(i,1); c.logs.splice(i,1);
+    const shift=o=>{const r={}; Object.keys(o||{}).forEach(k=>{if(+k<i)r[k]=o[k]; else if(+k>i)r[+k-1]=o[k];}); return r;};
+    c.swaps=shift(c.swaps); if(c.sug) c.sug=shift(c.sug);
+    save(); keepScroll();
+  }
+  else if(a==='stack'){
+    const id=b.dataset.ex;
+    $('#sheetBody').innerHTML=`<h2 id="sheetT">${esc(EX[id].n)}・重量格 lbs</h2>
+      <label class="field"><span>照機器上的數字</span><input class="txt" id="stkIn" inputmode="decimal" autocomplete="off" value="${stackOf(id).join(', ')}"></label>
+      <p class="err" id="stkErr" role="alert"></p>
+      <button class="btn primary block" type="button" data-act="stkSave" data-ex="${id}">儲存</button>
+      ${(S.stacks||{})[id]?`<button class="btn block" type="button" data-act="stkReset" data-ex="${id}">恢復預設</button>`:''}`;
+    $('#sheet').hidden=false; document.body.style.overflow='hidden';
+  }
+  else if(a==='stkSave'||a==='stkReset'){
+    const id=b.dataset.ex; S.stacks=Object.assign({},S.stacks||{});
+    if(a==='stkSave'){
+      const v=[...new Set(($('#stkIn').value||'').split(/[^0-9.]+/).map(Number).filter(x=>x>0))].sort((x,y)=>x-y);
+      if(v.length<2){$('#stkErr').textContent='至少填兩格';return;}
+      S.stacks[id]=v;
+    } else delete S.stacks[id];
+    if(c) c.items.forEach((_,k)=>{ if(curId(c,k)!==id) return; c.logs[k].forEach(s=>{if(!s.done){s.w='';s.r='';}}); fillSug(p,c,k); });
+    closeHow(); save(); keepScroll();
+  }
+
   else if(a==='abort'){
     if(!arm(b,'abort','確定放棄？再按一次','放棄這次訓練'))return;
     p.current=null;stopRest();save();go('plan');
@@ -1135,7 +1257,7 @@ render();
 document.addEventListener('visibilitychange',()=>{ if(document.visibilityState==='visible') Sync.run(); });
 window.addEventListener('online',()=>Sync.run());
 /* 自動更新：主畫面 App 會留舊版快取；開啟／切回來時偷看線上版本，有新版就重新載入 */
-const APP_VER='2026-11-25a';
+const APP_VER='2026-11-25b';
 function checkUpdate(){
   fetch('./?v='+Date.now(),{cache:'no-store'}).then(r=>r.ok?r.text():'').then(t=>{
     const m=t.match(/const APP_VER='([^']+)'/);
